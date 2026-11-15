@@ -621,6 +621,34 @@
 @keyframes livepulse { 50% { box-shadow: 0 0 10px rgba(255,178,26,.6); } }
 p.fx { color: #cfd3da; font-size: 12px; line-height: 1.4; margin: 6px 0 10px; }
 .me-cred { margin: 10px 0 4px; color: #ffb21a; font-weight: 800; letter-spacing: .14em; font-size: 12px; }
+/* levels */
+.rk { display: inline-flex; align-items: center; gap: 3px; font: 900 11px var(--font); color: #fff; padding: 1px 5px 1px 3px; background: rgba(0,0,0,.45); border: 1px solid var(--rk); vertical-align: middle; line-height: 14px; }
+.rk i { width: 9px; height: 9px; background: var(--rk); clip-path: polygon(0 0, 50% 40%, 100% 0, 100% 60%, 50% 100%, 0 60%); }
+.mm-rank { display: flex; align-items: center; gap: 8px; padding: 4px 10px; background: rgba(255,255,255,.06); }
+.mm-rank .rk { font-size: 13px; padding: 2px 6px 2px 4px; }
+.mm-rank .rk i { width: 11px; height: 11px; }
+.mm-rank b { display: block; font: 800 12px var(--font); letter-spacing: .14em; }
+.mm-rank small { display: block; font-size: 10px; letter-spacing: .1em; opacity: .7; }
+.mm-rank > div > i { display: block; height: 3px; margin-top: 4px; background: rgba(255,255,255,.15); position: relative; min-width: 64px; }
+.locked > small { visibility: hidden; }
+.mm-rank > div > i::after { content: ''; position: absolute; inset: 0; width: calc(var(--p) * 100%); background: #ffb21a; }
+.locked { opacity: .5; filter: grayscale(.7); position: relative; }
+.locked:hover { opacity: .7; }
+.lockpill { position: absolute; top: 9px; right: 14px; font: 800 10px var(--font); letter-spacing: .1em; padding: 2px 6px; background: rgba(0,0,0,.7); color: #ffd04a; }
+.lvtag { position: absolute; top: 6px; right: 6px; font-size: 9px; font-weight: 800; letter-spacing: .1em; padding: 2px 5px; background: rgba(0,0,0,.7); color: #ffd04a; pointer-events: none; }
+.shake { animation: gshake2 .3s; }
+@keyframes gshake2 { 25%, 75% { transform: translateX(-5px); } 50% { transform: translateX(5px); } }
+#xptick { position: absolute; left: 50%; top: 58%; transform: translate(-50%, 0); font: 900 15px var(--font); font-style: italic; letter-spacing: .1em; color: #ffd04a; text-shadow: 0 2px 6px rgba(0,0,0,.6); opacity: 0; pointer-events: none; }
+#xptick.go { animation: xpgo 1.6s ease-out forwards; }
+@keyframes xpgo { 0% { opacity: 0; transform: translate(-50%, 8px); } 12% { opacity: 1; transform: translate(-50%, 0); } 75% { opacity: 1; } 100% { opacity: 0; transform: translate(-50%, -10px); } }
+.me-xp { margin: 8px 0 4px; text-align: left; }
+.me-xp-top { display: flex; align-items: center; gap: 8px; }
+.me-xp-top b { font-size: 13px; letter-spacing: .12em; }
+.me-xp-top span { margin-left: auto; color: #ffd04a; font-weight: 800; font-size: 13px; }
+.me-xp > i { display: block; height: 6px; margin: 6px 0 4px; background: rgba(255,255,255,.12); position: relative; }
+.me-xp > i::after { content: ''; position: absolute; inset: 0; width: calc(var(--p) * 100%); background: linear-gradient(90deg, #ff8a1a, #ffd04a); }
+.me-xp small { font-size: 11px; letter-spacing: .1em; opacity: .7; }
+.me-unl { margin: 6px 0 0; font-size: 12px; font-weight: 800; letter-spacing: .1em; color: #8fe8ff; }
 </style>
 </head>
 <body>
@@ -735,7 +763,7 @@ p.fx { color: #cfd3da; font-size: 12px; line-height: 1.4; margin: 6px 0 10px; }
 
   <section class="mm-page mm-home" data-page="home">
     <div class="mm-col mm-home-left">
-      <div class="mm-kicker">SEASON 1 · BUILD 0.52</div>
+      <div class="mm-kicker">SEASON 1 · BUILD 0.53</div>
       <button class="mm-big" id="mm-play" type="button">
         <span class="mm-big-t">PLAY</span>
         <span class="mm-big-s" id="mm-play-sub">SEMI-FINALS · FIND A MATCH</span>
@@ -846,40 +874,41 @@ p.fx { color: #cfd3da; font-size: 12px; line-height: 1.4; margin: 6px 0 10px; }
 <script type="importmap">
 {
  "imports": {
-  "./src/attachments.js": "./src/attachments.js?v=0.52-1794660601",
-  "./src/audio.js": "./src/audio.js?v=0.52-1794660601",
-  "./src/batch.js": "./src/batch.js?v=0.52-1794660601",
-  "./src/bench.js": "./src/bench.js?v=0.52-1794660601",
-  "./src/bots.js": "./src/bots.js?v=0.52-1794660601",
-  "./src/classes.js": "./src/classes.js?v=0.52-1794660601",
-  "./src/contestant.js": "./src/contestant.js?v=0.52-1794660601",
-  "./src/cosmetics.js": "./src/cosmetics.js?v=0.52-1794660601",
-  "./src/course.js": "./src/course.js?v=0.52-1794660601",
-  "./src/effects.js": "./src/effects.js?v=0.52-1794660601",
-  "./src/elevator.js": "./src/elevator.js?v=0.52-1794660601",
-  "./src/gadgets.js": "./src/gadgets.js?v=0.52-1794660601",
-  "./src/heavy.js": "./src/heavy.js?v=0.52-1794660601",
-  "./src/input.js": "./src/input.js?v=0.52-1794660601",
-  "./src/main.js": "./src/main.js?v=0.52-1794660601",
-  "./src/maps/arenas.js": "./src/maps/arenas.js?v=0.52-1794660601",
-  "./src/maps/testRange.js": "./src/maps/testRange.js?v=0.52-1794660601",
-  "./src/matchmaking.js": "./src/matchmaking.js?v=0.52-1794660601",
-  "./src/math.js": "./src/math.js?v=0.52-1794660601",
-  "./src/nav.js": "./src/nav.js?v=0.52-1794660601",
-  "./src/net.js": "./src/net.js?v=0.52-1794660601",
-  "./src/player.js": "./src/player.js?v=0.52-1794660601",
-  "./src/props.js": "./src/props.js?v=0.52-1794660601",
-  "./src/renderer.js": "./src/renderer.js?v=0.52-1794660601",
-  "./src/rig.js": "./src/rig.js?v=0.52-1794660601",
-  "./src/takedown.js": "./src/takedown.js?v=0.52-1794660601",
-  "./src/tdm.js": "./src/tdm.js?v=0.52-1794660601",
-  "./src/thumbs.js": "./src/thumbs.js?v=0.52-1794660601",
-  "./src/weapon.js": "./src/weapon.js?v=0.52-1794660601",
-  "./src/weapons.js": "./src/weapons.js?v=0.52-1794660601",
-  "./src/world.js": "./src/world.js?v=0.52-1794660601"
+  "./src/attachments.js": "./src/attachments.js?v=0.53-1794741868",
+  "./src/audio.js": "./src/audio.js?v=0.53-1794741868",
+  "./src/batch.js": "./src/batch.js?v=0.53-1794741868",
+  "./src/bench.js": "./src/bench.js?v=0.53-1794741868",
+  "./src/bots.js": "./src/bots.js?v=0.53-1794741868",
+  "./src/classes.js": "./src/classes.js?v=0.53-1794741868",
+  "./src/contestant.js": "./src/contestant.js?v=0.53-1794741868",
+  "./src/cosmetics.js": "./src/cosmetics.js?v=0.53-1794741868",
+  "./src/course.js": "./src/course.js?v=0.53-1794741868",
+  "./src/effects.js": "./src/effects.js?v=0.53-1794741868",
+  "./src/elevator.js": "./src/elevator.js?v=0.53-1794741868",
+  "./src/gadgets.js": "./src/gadgets.js?v=0.53-1794741868",
+  "./src/heavy.js": "./src/heavy.js?v=0.53-1794741868",
+  "./src/input.js": "./src/input.js?v=0.53-1794741868",
+  "./src/main.js": "./src/main.js?v=0.53-1794741868",
+  "./src/maps/arenas.js": "./src/maps/arenas.js?v=0.53-1794741868",
+  "./src/maps/testRange.js": "./src/maps/testRange.js?v=0.53-1794741868",
+  "./src/matchmaking.js": "./src/matchmaking.js?v=0.53-1794741868",
+  "./src/math.js": "./src/math.js?v=0.53-1794741868",
+  "./src/nav.js": "./src/nav.js?v=0.53-1794741868",
+  "./src/net.js": "./src/net.js?v=0.53-1794741868",
+  "./src/player.js": "./src/player.js?v=0.53-1794741868",
+  "./src/progress.js": "./src/progress.js?v=0.53-1794741868",
+  "./src/props.js": "./src/props.js?v=0.53-1794741868",
+  "./src/renderer.js": "./src/renderer.js?v=0.53-1794741868",
+  "./src/rig.js": "./src/rig.js?v=0.53-1794741868",
+  "./src/takedown.js": "./src/takedown.js?v=0.53-1794741868",
+  "./src/tdm.js": "./src/tdm.js?v=0.53-1794741868",
+  "./src/thumbs.js": "./src/thumbs.js?v=0.53-1794741868",
+  "./src/weapon.js": "./src/weapon.js?v=0.53-1794741868",
+  "./src/weapons.js": "./src/weapons.js?v=0.53-1794741868",
+  "./src/world.js": "./src/world.js?v=0.53-1794741868"
  }
 }
 </script>
-<script type="module" src="src/main.js?v=0.52-1794660601"></script>
+<script type="module" src="src/main.js?v=0.53-1794741868"></script>
 </body>
 </html>

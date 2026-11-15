@@ -12,6 +12,7 @@ const BLACK = [0.08, 0.08, 0.09];
 const RED = [0.92, 0.1, 0.08], RED_HEAD = [1, 0.22, 0.16], RED_DARK = [0.55, 0.06, 0.05];
 const GUN = [0.1, 0.1, 0.11], GUN2 = [0.2, 0.2, 0.22];
 const FRAME = [0.11, 0.11, 0.125], JOINT = [0.26, 0.26, 0.28], SOLE = [0.06, 0.06, 0.07], GLOW = [1, 0.32, 0.18];
+const HAND = [0.11, 0.11, 0.126];       // hands: frame-coloured unless an outfit gives them gloves
 const TYPES = {
   rifle: { hp: 100, speed: 4.2, range: [11, 19], rpm: 560, burst: [3, 5], dmg: 6, acc: 1, pause: [0.7, 1.5], build: 1 },
   rusher: { hp: 80, speed: 5.6, range: [4, 8], rpm: 900, burst: [5, 8], dmg: 5, acc: 0.85, pause: [0.5, 1.0], build: 0.88 },
@@ -48,6 +49,20 @@ let nextId = 1;
 export function teamPalette(c) {
   const m = (k) => c.map((v) => Math.min(1, v * k));
   return new Map([[RED, c], [RED_HEAD, m(1.18)], [RED_DARK, m(0.55)]]);
+}
+// a player's outfit on the armoured body: armour in their top/jacket colour, helmet in their headwear colour, the
+// under-suit in their trousers colour, boots in their shoes, hands in their gloves. The visor, core and vents glow
+// in the team colour so you can still tell sides apart at a glance.
+export function lookPalette(look, team) {
+  const k = (c, f) => c.map((v) => Math.min(1, v * f));
+  const mix = (a, b, t) => a.map((v, i) => v + (b[i] - v) * t);
+  const main = look.m || team, head = look.h || main, legs = look.b || FRAME;
+  return new Map([
+    [RED, main], [RED_HEAD, head], [RED_DARK, k(main, 0.55)],
+    [FRAME, mix(k(legs, 0.55), FRAME, 0.35)], [JOINT, mix(k(legs, 0.8), JOINT, 0.5)],
+    [SOLE, look.s ? k(look.s, 0.6) : SOLE], [HAND, look.g || FRAME],
+    [GLOW, team.map((v) => Math.min(1, v * 1.15 + 0.08))],
+  ]);
 }
 
 export class Bot {
@@ -402,7 +417,7 @@ export class Bot {
     const cp = Math.cos(this.aimPitch), sp = Math.sin(this.aimPitch);
     const gd = [0, sp, -cp];                                           // gun direction (bot space)
     const gunC = add3(up([0.12 * b, 0.42, -0.3]), [0, this.recoil * 0.025, this.recoil * 0.07]);
-    const noGun = !!P?.hands;
+    const noGun = !!P?.hands || !!this.gunDef;
     const GB = pitchBasis(BB, this.aimPitch + this.recoil * 0.12);
     const gat = (v) => add3(gunC, [v[0], v[1] * cp - v[2] * sp, v[1] * sp + v[2] * cp]);   // gun-space offset (z back)
     if (!noGun) {
@@ -417,7 +432,19 @@ export class Bot {
     const muz = add3(gunC, gd.map((v) => v * 0.39));
     this.muzzlePt = W(muz);
     let gripR = add3(gunC, [0, -0.05, 0.16]), gripL = add3(gunC, gd.map((v) => v * 0.18)).map((v, i) => v + (i === 1 ? -0.05 : 0));
-    if (noGun) {
+    // a player's real gun (online): grip in the right hand, the front grip in the left, aimed like the bot gun
+    let realGun = null;
+    if (this.gunDef && !P?.hands) {
+      const d = this.gunDef, rot = (v) => [v[0], v[1] * cp - v[2] * sp, v[1] * sp + v[2] * cp];
+      const gR = d.grip || [0, -0.08, 0.1], gF = d.foreGrip || [0, -0.04, -0.25];
+      const org = sub3(gripR, rot(gR));
+      gripL = add3(org, rot(gF));
+      const o = W(org), m = new Float32Array(16);
+      [GB.R, GB.U, GB.B].forEach((v, i) => { m[i * 4] = v[0] * s; m[i * 4 + 1] = v[1] * s; m[i * 4 + 2] = v[2] * s; });
+      m[12] = o[0]; m[13] = o[1]; m[14] = o[2]; m[15] = 1;
+      realGun = m;
+    }
+    if (noGun && P?.hands) {
       // hand targets lean with the upper body
       const hl = (v) => hipLean ? add3(pelvis, lean(sub3(v, pelvis), hipLean)) : v;
       gripL = hl(P.hands[0]); gripR = hl(P.hands[1]);
@@ -435,11 +462,13 @@ export class Bot {
       ell(elbow, BB, [0.095 * b, 0.095, 0.095], JOINT, emD);
       cap(elbow, hand, 0.045 * b, 0.036 * b, FRAME, emD);
       cap(lerp3(elbow, hand, 0.1), lerp3(elbow, hand, 0.72), 0.072 * b, 0.058 * b, RED);     // forearm shell
-      box(hand, BB, [0.085, 0.095, 0.1], 0.035, FRAME, emD);
+      box(hand, BB, [0.085, 0.095, 0.1], 0.035, HAND, emD);
       // pauldron
       const pd = heavy ? 1.3 : 1;
       box(up([side * 0.3 * b, 0.565, 0]), TB, [0.17 * b * pd, 0.11 * pd, 0.22 * pd], 0.05 * pd, RED_HEAD);
     }
+    this.gunMatrix = realGun;
+    if (realGun && this.gunPartsOf) return bd.out.concat(this.gunPartsOf(this.gunDef, realGun));
     return bd.out;
   }
 

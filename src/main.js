@@ -21,6 +21,7 @@ import { ARENAS } from './maps/arenas.js';
 import { Course, fmtTime } from './course.js';
 import { Elevator } from './elevator.js';
 import { BotManager, Bot, teamPalette } from './bots.js';
+import { loadProgress, levelInfo, rankOf, badgeHTML, addXp, XP, LEVEL_CREDITS, GUN_LV, TD_LV, SKIN_LV, gunLocked, tdLocked, skinLocked, unlocksAt, levelOf } from './progress.js';
 import { takedownPose, takedownProps, REACH } from './takedown.js';
 import { Matchmaking } from './matchmaking.js';
 import { Deathmatch } from './tdm.js';
@@ -181,6 +182,39 @@ const cosmetics = loadCosmetics();
 setHandLook(buildOutfit(cosmetics, classLo.cls));
 let skinClass = null;    // class whose weapon skin to show (defaults to the active class)
 const defFor = (id) => skinDef(buildDef(WEAPONS[id], loadouts[id] || {}), gunSkinFor(cosmetics, skinClass || classLo.cls));
+// ---------- levels: XP from matches, ranks, unlocks ----------
+const progress = loadProgress();
+let matchXp = 0, matchUnlocks = [];
+const unlockNames = { gun: (id) => WEAPONS[id]?.name || id, td: (id) => TAKEDOWNS[id]?.name || id, skin: (id) => ITEMS[id]?.name || id };
+function gainXp(n, label) {
+  if (!n) return;
+  const ups = addXp(progress, n);
+  matchXp += n;
+  xpTick(`+${n} XP${label ? ' · ' + label : ''}`);
+  for (const lv of ups) {
+    const un = unlocksAt(lv, unlockNames);
+    matchUnlocks.push(...un);
+    cosmetics.credits += LEVEL_CREDITS; saveCosmetics(cosmetics);
+    const r = rankOf(lv);
+    setTimeout(() => banner(`LEVEL ${lv}`, `${r.name} · +${LEVEL_CREDITS} ${CURRENCY}${un.length ? ' · UNLOCKED ' + un.join(', ') : ''}`, 'good', 2.6), 400);
+    sounds.checkpoint?.();
+  }
+}
+// the little "+100 XP" line under the crosshair
+let xpEl = null, xpTimer = 0;
+function xpTick(text) {
+  if (!xpEl) { xpEl = document.createElement('div'); xpEl.id = 'xptick'; document.getElementById('hud')?.append(xpEl); }
+  if (!xpEl) return;
+  xpEl.textContent = text;
+  xpEl.classList.remove('go'); void xpEl.offsetWidth; xpEl.classList.add('go');
+  clearTimeout(xpTimer); xpTimer = setTimeout(() => xpEl.classList.remove('go'), 1600);
+}
+// what other players see of me online: outfit colours, my gun with its attachments and skin
+function myLook() {
+  const o = buildOutfit(cosmetics, classLo.cls), w = classWeapons()[0];
+  const r = (c) => (Array.isArray(c) ? c.map((v) => Math.round(v * 100) / 100) : null);
+  return { m: r(o.jacket || o.vest || o.top), h: r(o.head && o.head !== 'hair' ? o.headCol : o.hair), b: r(o.bottom), s: r(o.shoes), g: r(o.gloves), w, a: loadouts[w] || {}, sk: cosmetics.equip[classLo.cls].wskin || '' };
+}
 const cases = gunCrates(world, CASE_ORDER.map((id) => defFor(id)), map.bench.pos);   // guns jammed in two crates by the workbench
 const workbench = new Workbench(world, map.bench.pos);
 player.spawn(map.spawn.pos, map.spawn.yaw);
@@ -238,8 +272,8 @@ const THROW_RECHARGE = 14;
 let heavyCd = 0;
 let classDirty = true;          // class changed since the current test-range session started
 function classWeapons() {
-  const sel = classLo[classLo.cls];
-  return [sel.weapon, sel.sidearm];
+  const sel = classLo[classLo.cls], c = CLASSES[classLo.cls];
+  return [gunLocked(progress, sel.weapon) ? c.weapons[0] : sel.weapon, gunLocked(progress, sel.sidearm) ? c.sidearms[0] : sel.sidearm];
 }
 function applyClass() {
   const c = CLASSES[classLo.cls];
@@ -592,7 +626,7 @@ function updateSkinLive(dt) {
   }
 }
 function killFeed(a, weaponName, b, head) {
-  if (a === 'YOU' && b !== 'YOU') { skinStreak++; skinHeat = Math.min(1, skinHeat + 0.45); if (tdm.active) earn(Object.values(TAKEDOWNS).some((t) => t.name === weaponName) ? 50 : 25); }
+  if (a === 'YOU' && b !== 'YOU') { skinStreak++; skinHeat = Math.min(1, skinHeat + 0.45); if (tdm.active) { const tdk = Object.values(TAKEDOWNS).some((t) => t.name === weaponName); earn(tdk ? 50 : 25); gainXp(tdk ? XP.takedown : XP.kill, tdk ? 'TAKEDOWN' : 'KILL'); } }
   kills.unshift({ a, w: weaponName, b, head, t: 0 });
   if (kills.length > 5) kills.pop();
   renderKillFeed();
@@ -651,7 +685,7 @@ let deathDur = 3, takenBy = null, td = null, downedNear = null, tdShake = 0, vic
 const bodyPt = (b) => b.toWorld([0, 0.3, (b.fallSign || 1) * 1.0]);
 function myTakedownKind() {
   const list = takedownsFor(classLo.cls), k = classLo[classLo.cls].takedown;
-  return list.includes(k) ? k : list[0];
+  return list.includes(k) && !tdLocked(progress, k) ? k : list[0];
 }
 // a body for me, drawn only in cutscenes (no hitboxes)
 function makeMyBody(pos, yaw) {
@@ -1698,6 +1732,7 @@ function itemCard(id, { onClick, on = false, priceTag = true }) {
   } else b.append(img);
   b.append(el('b', null, it.name), el('small', null, r.name));
   if (it.gun?.tex) b.append(el('span', `livetag${it.live ? ' react' : ''}`, it.live ? 'REACTIVE' : 'PATTERN'));
+  if (SKIN_LV[id] && !owns(cosmetics, id) && skinLocked(progress, id)) b.append(el('span', 'lvtag', `LV ${SKIN_LV[id]}`));
   if (priceTag) {
     if (owns(cosmetics, id)) b.append(el('span', 'price own', it.price ? 'OWNED' : 'FREE'));
     else b.append(el('span', 'price', `◆ ${fmt(it.price)}`));
@@ -1766,10 +1801,12 @@ function renderShop() {
   box.style.setProperty('--r', rgb(r.color));
   const slotName = CSLOTS.find((x) => x.id === it.slot).name;
   const worn = own && cosmetics.equip[custCls || classLo.cls][it.slot] === tryOn;
-  const btn = el('button', own ? 'own' : cosmetics.credits < it.price ? 'no' : '', worn ? 'EQUIPPED ✓' : own ? 'EQUIP' : `BUY ◆ ${fmt(it.price)}`);
+  const lockedLv = !own && skinLocked(progress, tryOn) ? SKIN_LV[tryOn] : 0;
+  const btn = el('button', own ? 'own' : lockedLv || cosmetics.credits < it.price ? 'no' : '', worn ? 'EQUIPPED ✓' : own ? 'EQUIP' : lockedLv ? `🔒 LEVEL ${lockedLv}` : `BUY ◆ ${fmt(it.price)}`);
   btn.type = 'button';
   btn.onclick = () => {
     const cls = custCls || classLo.cls;
+    if (lockedLv) { sounds.denied?.(); return; }
     if (!own && !buy(cosmetics, tryOn)) { sounds.dry?.(); return; }
     if (!own) sounds.pickup?.();
     cosmetics.equip[cls][it.slot] = tryOn;
@@ -1778,7 +1815,7 @@ function renderShop() {
     if (it.slot === 'wskin') refreshGuns();
     renderMenu();
   };
-  const note = worn ? `Wearing it on ${CLASSES[custCls || classLo.cls].name}.` : own ? `Owned. Equip it on ${CLASSES[custCls || classLo.cls].name}.` : cosmetics.credits < it.price ? 'Not enough credits.' : `Buys and equips on ${CLASSES[custCls || classLo.cls].name}.`;
+  const note = lockedLv ? `Reach level ${lockedLv} to buy this.` : worn ? `Wearing it on ${CLASSES[custCls || classLo.cls].name}.` : own ? `Owned. Equip it on ${CLASSES[custCls || classLo.cls].name}.` : cosmetics.credits < it.price ? 'Not enough credits.' : `Buys and equips on ${CLASSES[custCls || classLo.cls].name}.`;
   box.replaceChildren(el('small', null, `${r.name} · ${slotName}${it.live ? ' · REACTIVE' : ''}`), el('b', null, it.name), ...(it.fx ? [el('p', 'fx', it.fx)] : []), btn, el('p', null, note));
 }
 // rebuild guns after a weapon-skin change (in your hands, the cases and the showroom)
@@ -1806,12 +1843,13 @@ const mmk = new Matchmaking({
 });
 // ONLINE: host or join a room for 1v1 / 2v2 with friends
 const lobby = new Lobby(world, {
-  root: $('net'), arenas: ARENAS.map((a) => a.name), getClass: () => classLo.cls,
+  root: $('net'), arenas: ARENAS.map((a) => a.name), getClass: () => classLo.cls, getMe: () => ({ lv: levelOf(progress), look: myLook() }),
   onClose: () => { menu.classList.remove('hidden'); renderMenu(); },
   onStart: (info) => startOnline(info),
   onHostLeft: () => { banner('HOST LEFT', 'MATCH OVER', 'bad', 2); setTimeout(() => endMatch(true), 1600); },
 });
 const online = lobby.online;
+setInterval(() => { try { online.refreshMe(); } catch { /* not in a room */ } }, 1500);
 const netHooks = {
   player,
   onShatter: (b) => botHooks.onShatter(b),
@@ -1823,6 +1861,12 @@ const netHooks = {
   cloaked: () => cloakT > 0,
   grapplePoint: () => (player.grapple && player.grapple.phase !== 'miss' ? player.grapple.point.map((v) => +v.toFixed(2)) : null),
   remoteGadget: (spec) => gadgets.place(spec),
+  // other players' guns, built from what they sent: weapon, attachments and skin
+  gunDefFor: (look) => {
+    if (!WEAPONS[look.w]) return null;
+    try { return skinDef(buildDef(WEAPONS[look.w], look.a || {}), ITEMS[look.sk]?.slot === 'wskin' ? ITEMS[look.sk].gun : null); } catch { return null; }
+  },
+  gunPartsOf: (def, m) => Weapon.worldParts(def, m),
   takenDown: (name, kind) => takenDown(name, kind),
   // another player (or the host's bot) started a takedown: play the animation on their body
   remoteTakedownStart: (att, victim, kind) => {
@@ -1874,6 +1918,7 @@ function netCopy(agent, fn) {
 }
 function startOnline(info) {
   matchEarned = 0;
+  matchXp = 0; matchUnlocks = [];
   if (ai.active) ai.stop();
   tdm = online;
   online.g = netHooks;
@@ -1924,6 +1969,7 @@ function setTeamsHud(m) {
 let lastMatch = null;
 function startMatch(m) {
   matchEarned = 0;
+  matchXp = 0; matchUnlocks = [];
   lastMatch = m;
   if (tdm === online || online.inRoom) { online.leave(); tdm = ai; }
   batches.world = null;     // re-batch once the match props are set up
@@ -1968,9 +2014,14 @@ function showMatchEnd() {
   const t = document.createElement('b'); t.textContent = place < 1 ? 'YOU ADVANCE TO THE FINAL' : 'ELIMINATED';
   t.className = place < 1 ? 'win' : 'lose';
   card.append(h, t);
-  if (!tdm.over.paid) { tdm.over.paid = true; earn(place < 1 ? 300 : 100); }
+  if (!tdm.over.paid) { tdm.over.paid = true; earn(place < 1 ? 300 : 100); gainXp(place < 1 ? XP.win : XP.loss, place < 1 ? 'WIN' : 'MATCH'); }
   const cr = document.createElement('p'); cr.className = 'me-cred'; cr.textContent = `+${fmt(matchEarned)} ${CURRENCY} EARNED · ${fmt(cosmetics.credits)} TOTAL`;
   card.append(cr);
+  // XP and level
+  const li = levelInfo(progress.xp), rk = rankOf(li.level);
+  const xp = document.createElement('div'); xp.className = 'me-xp';
+  xp.innerHTML = `<div class="me-xp-top">${badgeHTML(li.level)} <b>LEVEL ${li.level} · ${rk.name}</b><span>+${fmt(matchXp)} XP</span></div><i style="--p:${li.max ? 1 : (li.into / li.need).toFixed(3)}"></i><small>${li.max ? 'MAX LEVEL' : `${fmt(li.into)} / ${fmt(li.need)} XP TO LEVEL ${li.level + 1}`}</small>${matchUnlocks.length ? `<p class="me-unl">UNLOCKED: ${matchUnlocks.join(' · ')}</p>` : ''}`;
+  card.append(xp);
   st.forEach((tm, i) => {
     const r = document.createElement('div');
     r.className = `me-row${tm === tdm.myTeam ? ' mine' : ''}${i < 1 ? ' adv' : ''}`;
@@ -2018,6 +2069,8 @@ function updateBoard(dt) {
       const name = r.e.isPlayer ? `${lobby.name || 'YOU'} (YOU)` : r.e.name;
       const cls = r.e.isPlayer ? classLo.cls : r.e.cls;
       for (const v of [name, CLASSES[cls]?.name || '', r.k, r.d]) { const c = document.createElement('span'); c.textContent = v; row.append(c); }
+      const lv = r.e.isPlayer ? levelOf(progress) : r.e.lv;
+      if (lv) row.firstChild.insertAdjacentHTML('afterbegin', badgeHTML(lv) + ' ');
       col.append(row);
     }
     return col;
@@ -2101,12 +2154,26 @@ addEventListener('keydown', (e) => {
 }, true);
 const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
 const rgb = (c) => `rgb(${c.map((v) => Math.round(v * 255)).join(',')})`;
+// a menu button for something you haven't unlocked yet: greyed out with the level it opens at
+function lockBtn(b, lv) {
+  b.classList.add('locked'); b.classList.remove('on');
+  b.append(el('span', 'lockpill', `🔒 LEVEL ${lv}`));
+  b.onclick = () => { sounds.denied?.(); b.classList.remove('shake'); void b.offsetWidth; b.classList.add('shake'); };
+  return b;
+}
 function renderMenu() {
   const c = CLASSES[classLo.cls], sel = classLo[classLo.cls];
   document.documentElement.style.setProperty('--cls', rgb(c.color));
   $('mm-chip').innerHTML = '';
   $('mm-chip').append('CLASS ', el('b', null, c.name));
   $('mm-credits').textContent = `${fmt(cosmetics.credits)} ${CURRENCY}`;
+  { // rank chip: badge, rank, level and an XP bar
+    const li = levelInfo(progress.xp), rk = rankOf(li.level);
+    let rc = $('mm-rank');
+    if (!rc) { rc = el('div', 'mm-rank'); rc.id = 'mm-rank'; $('mm-chip').before(rc); }
+    rc.title = li.max ? 'MAX LEVEL' : `${fmt(li.into)} / ${fmt(li.need)} XP TO LEVEL ${li.level + 1}`;
+    rc.innerHTML = `${badgeHTML(li.level)}<div><b>${rk.name}</b><i style="--p:${li.max ? 1 : (li.into / li.need).toFixed(3)}"></i></div>`;
+  }
   if (menuTab === 'custom') renderCustom();
   if (menuTab === 'shop') renderShop();
   $('mm-name').replaceChildren(el('b', null, c.name), el('span', null, `${WEAPONS[sel.weapon].name} · ${ABILITIES[sel.ability].short} · ${HEAVIES[sel.heavy].short}`));
@@ -2146,6 +2213,7 @@ function renderMenu() {
       const sp = el('span', null, n); const i = el('i'); i.style.setProperty('--p', pick(n).v.toFixed(3)); sp.append(i); bars.append(sp);
     }
     b.append(el('b', null, WEAPONS[id].name), el('small', null, WEAPONS[id].type), bars);
+    if (gunLocked(progress, id)) return lockBtn(b, GUN_LV[id]);
     b.onclick = () => { sel.weapon = id; classDirty = true; saveLoadout(classLo); sounds.magIn?.(); renderMenu(); };
     return b;
   }));
@@ -2155,6 +2223,7 @@ function renderMenu() {
     b.type = 'button';
     b.style.setProperty('--c', rgb(c.color));
     b.append(el('b', null, WEAPONS[id].name), el('small', null, WEAPONS[id].type));
+    if (gunLocked(progress, id)) return lockBtn(b, GUN_LV[id]);
     b.onclick = () => { sel.sidearm = id; classDirty = true; saveLoadout(classLo); sounds.magIn?.(); renderMenu(); };
     return b;
   }));
@@ -2181,10 +2250,11 @@ function renderMenu() {
   // takedowns
   $('mm-takedowns').replaceChildren(...takedownsFor(classLo.cls).map((id) => {
     const a = TAKEDOWNS[id];
-    const b = el('button', `mm-abl${id === (sel.takedown || takedownsFor(classLo.cls)[0]) ? ' on' : ''}`);
+    const b = el('button', `mm-abl${id === myTakedownKind() ? ' on' : ''}`);
     b.type = 'button';
     b.style.setProperty('--c', rgb(c.color));
     b.append(el('b', null, a.name), el('small', null, `E ON A DOWNED ENEMY · ${a.dur.toFixed(1)} S`), el('p', null, a.desc));
+    if (tdLocked(progress, id)) return lockBtn(b, TD_LV[id]);
     b.onclick = () => { sel.takedown = id; saveLoadout(classLo); sounds.click?.(2600, 0.3, 4); renderMenu(); };
     return b;
   }));
@@ -2887,4 +2957,4 @@ function frameBody(now) {
 requestAnimationFrame(frame);
 
 // handy for debugging from the console / automated tests
- window.game = { skinLive: (h, s) => { skinHeat = h; skinStreak = s; }, startTakedown, updateTakedown, findDowned, takedownParts, get td() { return td; }, get deathT() { return deathT; }, useThrowable, get throwCharges() { return throwCharges; }, get flashT() { return flashT; }, heavy, useHeavy, applyClass, useGadget, useTether, useCloak, get cloakT() { return cloakT; }, get launcherW() { return launcherW; }, gadgets, get burning() { return burning; }, lobby, online, get tdm() { return tdm; }, batches, renderer, map, ARENAS, get stadium() { return stadium; }, setArena: (i) => { stadium = ARENAS[i]; }, lifts, hooks: botHooks, updateFall, hookTarget, fallTop: () => fallTop, breakGlass, updateCombat, startMatch: (m) => startMatch(m), enterStadium, where: () => where, sr: () => showroomChar, cosmetics, refreshGuns, classLo, renderMenu, showTab, enterRange, cs: () => cutscene, botMgr, elevator, damagePlayer, pressConsole, setTimeScale: (v) => { timeScale = v; }, bench, openBench, closeBench, loadouts, applyLoadout, course, player, slots, weapon, world, stats, effects, dummies, walls, cases, input, start, setPlaying, resetRange, switchTo, pickUp, WEAPONS };
+ window.game = { gainXp: (n, l) => gainXp(n, l), progress, skinLive: (h, s) => { skinHeat = h; skinStreak = s; }, startTakedown, updateTakedown, findDowned, takedownParts, get td() { return td; }, get deathT() { return deathT; }, useThrowable, get throwCharges() { return throwCharges; }, get flashT() { return flashT; }, heavy, useHeavy, applyClass, useGadget, useTether, useCloak, get cloakT() { return cloakT; }, get launcherW() { return launcherW; }, gadgets, get burning() { return burning; }, lobby, online, get tdm() { return tdm; }, batches, renderer, map, ARENAS, get stadium() { return stadium; }, setArena: (i) => { stadium = ARENAS[i]; }, lifts, hooks: botHooks, updateFall, hookTarget, fallTop: () => fallTop, breakGlass, updateCombat, startMatch: (m) => startMatch(m), enterStadium, where: () => where, sr: () => showroomChar, cosmetics, refreshGuns, classLo, renderMenu, showTab, enterRange, cs: () => cutscene, botMgr, elevator, damagePlayer, pressConsole, setTimeScale: (v) => { timeScale = v; }, bench, openBench, closeBench, loadouts, applyLoadout, course, player, slots, weapon, world, stats, effects, dummies, walls, cases, input, start, setPlaying, resetRange, switchTo, pickUp, WEAPONS };

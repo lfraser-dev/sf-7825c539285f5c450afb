@@ -16,7 +16,8 @@ const H = 10;          // wall height
 const STONE = [0.88, 0.84, 0.76], STONE2 = [0.8, 0.75, 0.66], DARKSTONE = [0.5, 0.46, 0.41], SAND = [0.84, 0.74, 0.56];
 
 // ---------------------------------------------------------------- layouts (local metres, floor at y = 0)
-// b: [x, z, sx, sy, sz, colour?, rounded?]   p: platform [x, z, sx, sz, h]   s: stairs [ex, ez, dirx, dirz, h, width]
+// b: [x, z, sx, sy, sz, colour?, rounded?, y?]   p: platform [x, z, sx, sz, h]   s: stairs [ex, ez, dirx, dirz, h, width]
+// br: bridge [x, z, sx, sz, h] (a walkway slab at height h you can walk under)
 // Everything listed is mirrored through the centre for the other team, except items flagged `mid` (already central).
 const LAYOUTS = [
   {
@@ -108,6 +109,41 @@ const LAYOUTS = [
       ],
       p: [[-22, -24, 6, 5, 2.4]],
       s: [[-22, -21.5, 0, 1, 2.4, 2.4]],
+    },
+  },
+  {
+    name: 'ROOFTOPS', W: 38, D: 26, S: 1.4, ox: 1320, windows: true,
+    blurb: 'ROOFS, BRIDGES AND A TOWER IN THE MIDDLE',
+    mid: {
+      p: [[0, 0, 8, 8, 3]],                                                     // the centre tower roof
+      s: [[0, 4, 0, 1, 3, 2.4], [0, -4, 0, -1, 3, 2.4]],
+      b: [
+        [0, 1.6, 2.2, 1.1, 1.0, CHAR, 0, 3], [0, -1.6, 2.2, 1.1, 1.0, CHAR, 0, 3],   // vents on the tower
+        [2.4, 0, 0.8, 2.6, 0.8, ACCENT, 0, 3], [-2.4, 0, 0.8, 2.6, 0.8, ACCENT, 0, 3],
+      ],
+    },
+    side: {
+      p: [
+        [-18, -6, 8, 8, 3],          // home roof, bridged to the tower
+        [-25, 15, 7, 7, 4.8],        // the high roof (sniper's nest)
+        [-8, -18, 6, 5, 1.6],        // a low shed roof
+      ],
+      br: [[-9, -3, 12, 2.4, 3]],    // home roof to the tower
+      s: [
+        [-14, -9, 1, 0, 3, 2.4],     // up to the home roof
+        [-21.5, 15, 1, 0, 4.8, 2.4], // up to the high roof
+        [-5, -18, 1, 0, 1.6, 2.4],   // up to the shed
+      ],
+      b: [
+        [-18, -3.5, 1.6, 1.2, 1.6, CHAR, 0, 3], [-20, -8, 2.2, 1.0, 1.1, ACCENT, 0, 3],      // AC units on the home roof
+        [-26.5, 16.5, 1.6, 2.2, 1.6, CHAR, 'cylY', 4.8], [-23, 13, 2.4, 1.1, 0.4, CHAR, 0, 4.8], // a water tank and a parapet
+        [-8, -17, 1.8, 1.0, 1.0, CHAR, 0, 1.6],                                               // crates on the shed
+        [-33, -7, 0.6, 1.2, 4, ACCENT], [-33, 7, 0.6, 1.2, 4, ACCENT],                       // spawn cover
+        [-12, 8, 0.6, 3, 6], [-28, -18, 0.6, 2.6, 6], [-6, 12, 4, 1.2, 0.6, ACCENT],          // walls in the alleys
+        [-15, 20, 2.2, 2.2, 2.2, WALL, 0.12], [-30, 2, 2.2, 2.2, 2.2, CHAR, 0.12], [-4, 20, 2.4, 2.4, 2.4, ACCENT, 0.12],
+        [-18, 0.5, 1.2, 2.7, 1.2, CHAR], [-11, -3, 1.2, 2.7, 1.2, CHAR],                       // bridge supports
+        [-26, -18, 2.4, 1.2, 2.4, CHAR], [-14, 14, 1.4, 4.5, 1.4, CHAR], [-6, 4, 2, 2, 2, WALL, 0.12],
+      ],
     },
   },
 ];
@@ -246,6 +282,15 @@ function buildArena(world, A) {
       at(x, 0, z, sx, h, sz, { color: A.round ? STONE2 : WALL, ...surf() });
       at(x, h - 0.12, z, sx + 0.06, 0.12, sz + 0.06, { color: A.round ? DARKSTONE : CHAR, grid: false });       // lip
       plats.push({ y: h, rect: [O[0] + x - sx / 2 + 0.5, O[2] + z - sz / 2 + 0.5, O[0] + x + sx / 2 - 0.5, O[2] + z + sz / 2 - 0.5] });
+      if (A.windows && h >= 2.4) {
+        // make it read as a building: a row of dark windows round each side, and a door
+        const wy = h * 0.42, wh = Math.min(1.1, h * 0.32);
+        for (const k of [-1, 1]) {
+          for (let t = -sx / 2 + 1; t <= sx / 2 - 1.2; t += 1.6) at(x + t + 0.55, wy, z + k * (sz / 2 + 0.01), 1.1, wh, 0.04, { color: CHAR, grid: false, solid: false, noShadow: true });
+          for (let t = -sz / 2 + 1; t <= sz / 2 - 1.2; t += 1.6) at(x + k * (sx / 2 + 0.01), wy, z + t + 0.55, 0.04, wh, 1.1, { color: CHAR, grid: false, solid: false, noShadow: true });
+        }
+        at(x, h - 0.02, z, sx - 0.6, 0.04, sz - 0.6, { color: ACCENT, grid: true, solid: false, noShadow: true });   // roof membrane
+      }
     }
     for (const [ex0, ez0, dx0, dz0, h, w0] of list.s || []) {
       const [ex, ez] = flip(ex0, ez0), [dx, dz] = mirror ? [-dx0, -dz0] : [dx0, dz0], w = w0 * S;
@@ -260,6 +305,18 @@ function buildArena(world, A) {
       chain.push(L(ex + dx * (n * run + 0.9), 0, ez + dz * (n * run + 0.9)));
       chain.reverse();
       chains.push(chain);
+    }
+    for (const [x0, z0, sx0, sz0, h] of list.br || []) {
+      // a walkway slab with a charcoal underside and red light strips along both edges
+      const [x, z] = flip(x0, z0), sx = sx0 * S, sz = sz0 * S;
+      at(x, h - 0.3, z, sx, 0.3, sz, { color: ACCENT, ...surf() });
+      at(x, h - 0.42, z, sx - 0.1, 0.12, sz - 0.1, { color: CHAR, grid: false, solid: false });
+      const along = sx > sz;
+      for (const k of [-1, 1]) {
+        const ox = along ? 0 : k * (sx / 2 - 0.04), oz = along ? k * (sz / 2 - 0.04) : 0;
+        at(x + ox, h - 0.2, z + oz, along ? sx : 0.08, 0.06, along ? 0.08 : sz, { color: RED, emissive: 0.9, grid: false, solid: false, noShadow: true });
+      }
+      plats.push({ y: h, rect: [O[0] + x - sx / 2 + 0.5, O[2] + z - sz / 2 + 0.5, O[0] + x + sx / 2 - 0.5, O[2] + z + sz / 2 - 0.5] });
     }
     for (const [x0, z0, sx0, sz0] of list.hut || []) {
       // four walls with a doorway in each x-facing side, and a roof

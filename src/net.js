@@ -8,7 +8,8 @@
 //
 // For testing, `?net=local` swaps WebRTC for a BroadcastChannel, so two tabs in one browser can play each other.
 import { ropeParts, hookParts } from './gadgets.js';
-import { Bot, teamPalette } from './bots.js';
+import { Bot, teamPalette, lookPalette } from './bots.js';
+import { badgeHTML } from './progress.js';
 import { compose, mat4 } from './math.js';
 import { TEAM_NAMES } from './matchmaking.js';
 import { CLASSES } from './classes.js';
@@ -349,9 +350,17 @@ export function settleBody(world, b, dt) {
   b.pos[1] = Math.max(floor, b.pos[1] - b.fallV * dt);
   if (b.pos[1] <= floor + 1e-3) b.settled = true;
 }
+// sanity-check a player's level and look sent over the network
+function cleanMe(m) {
+  const lv = Math.max(1, Math.min(50, Math.floor(+m.lv || 1)));
+  const col = (c) => (Array.isArray(c) && c.length === 3 && c.every((v) => Number.isFinite(v)) ? c.map((v) => Math.max(0, Math.min(1, v))) : null);
+  const L = m.look && typeof m.look === 'object' ? m.look : null;
+  const look = L ? { m: col(L.m), h: col(L.h), b: col(L.b), s: col(L.s), g: col(L.g), w: String(L.w || '').slice(0, 16), sk: String(L.sk || '').slice(0, 24), a: L.a && typeof L.a === 'object' ? L.a : {} } : null;
+  return { lv, look };
+}
 class Remote {
-  constructor(world, info, team) {
-    Object.assign(this, { world, id: info.id, name: info.name, cls: info.cls, team, isPlayer: false, isRemote: true });
+  constructor(world, info, team, g = null) {
+    Object.assign(this, { world, id: info.id, name: info.name, cls: info.cls, team, isPlayer: false, isRemote: true, lv: info.bot ? 0 : info.lv || 1, look: info.look || null, g });
     this.target = null; this.bot = null; this.dead = false;
     this.hp = 1; this.maxHp = 1; this.wep = null;
   }
@@ -360,6 +369,12 @@ class Remote {
     const b = new Bot(this.world, TYPE_OF[this.cls] || 'rifle', pos, yaw, 0);
     b.state = 'wait'; b.landed = true; b.dropT = 1;
     b.name = this.name; b.pal = teamPalette(this.team.rgb); b.team = this.team.idx;
+    // their outfit and their actual gun (with its skin)
+    if (this.look) {
+      try { b.pal = lookPalette(this.look, this.team.rgb); } catch { /* keep the team colours */ }
+      const d = this.g?.gunDefFor?.(this.look);
+      if (d) { b.gunDef = d; b.gunPartsOf = this.g.gunPartsOf; }
+    }
     b.remote = this; b.agent = this;
     b.place();
     this.bot = b; this.dead = false;
@@ -456,7 +471,7 @@ export class Online {
     }
     this.code = code;
     this.myId = this.tx.id || 'host';
-    this.players = [{ id: this.myId, name: this.ui.getName(), cls: this.ui.getClass(), team: 0 }];
+    this.players = [{ id: this.myId, name: this.ui.getName(), cls: this.ui.getClass(), team: 0, ...this.me() }];
     this.teamNames = [...TEAM_NAMES].sort(() => Math.random() - 0.5).slice(0, 2);
     this.tx.onPeer = () => {};
     this.tx.onData = (id, m) => this.hostData(id, m);
@@ -475,7 +490,7 @@ export class Online {
     this.tx.onData = (m) => this.handle(m);
     this.tx.onLeave = () => { this.ui.status?.('THE HOST LEFT'); this.ui.onHostLeft?.(); this.leave(); };
     this.inRoom = true;
-    this.tx.send({ t: 'hello', id: this.myId, name: this.ui.getName(), cls: this.ui.getClass() });
+    this.tx.send({ t: 'hello', id: this.myId, name: this.ui.getName(), cls: this.ui.getClass(), ...this.me() });
   }
 
   leave() {
@@ -490,12 +505,12 @@ export class Online {
       if (this.active) { this.tx.sendTo(from, { t: 'refused', why: 'MATCH IN PROGRESS' }); return; }
       if (this.players.length >= this.max) { this.tx.sendTo(from, { t: 'refused', why: 'ROOM FULL' }); return; }
       const n = [0, 1].map((k) => this.players.filter((p) => p.team === k).length);
-      this.players.push({ id: from, name: String(m.name || 'PLAYER').slice(0, 16), cls: CLASSES[m.cls] ? m.cls : 'medium', team: n[0] <= n[1] ? 0 : 1 });
+      this.players.push({ id: from, name: String(m.name || 'PLAYER').slice(0, 16), cls: CLASSES[m.cls] ? m.cls : 'medium', team: n[0] <= n[1] ? 0 : 1, ...cleanMe(m) });
       this.pushLobby();
       return;
     }
     if (m.t === 'bye') { this.dropPlayer(from); return; }
-    if (m.t === 'cls') { const p = this.players.find((q) => q.id === from); if (p && CLASSES[m.cls]) { p.cls = m.cls; this.pushLobby(); } return; }
+    if (m.t === 'cls') { const p = this.players.find((q) => q.id === from); if (p && CLASSES[m.cls]) { p.cls = m.cls; Object.assign(p, cleanMe(m)); this.pushLobby(); } return; }
     // game traffic: relay it on (to one player, or everyone else), and act on it here too
     if (m.to) { if (m.to === this.myId || this.byId(m.to)?.isAI) this.handle(m); else this.tx.sendTo(m.to, m); }
     else { for (const p of this.players) if (p.id !== this.myId && p.id !== from) this.tx.sendTo(p.id, m); this.handle(m); }
@@ -511,6 +526,17 @@ export class Online {
     if (!this.active) this.pushLobby();
   }
 
+  // my level and look (outfit colours, gun, attachments, skin), from the game
+  me() { const x = this.ui.getMe?.(); return x ? { lv: x.lv, look: x.look } : {}; }
+  // tell the room if my class, loadout or outfit changed while waiting
+  refreshMe() {
+    if (!this.inRoom || this.active) return;
+    const me = { cls: this.ui.getClass(), ...this.me() }, key = JSON.stringify(me);
+    if (key === this.meKey) return;
+    this.meKey = key;
+    if (this.isHost) { Object.assign(this.players[0], me); this.pushLobby(); }
+    else this.tx.send({ t: 'cls', ...me });
+  }
   pushLobby() {
     this.lobby = { t: 'lobby', code: this.code, mode: this.mode, max: this.max, players: this.players, teamNames: this.teamNames, arena: this.arenaPick };
     this.broadcast(this.lobby);
@@ -615,7 +641,7 @@ export class Online {
     this.agents.forEach((a) => a.remove());
     this.kd = {};
     this.co = null;
-    this.agents = m.players.filter((p) => p.id !== this.myId).map((p) => (p.bot && this.isHost ? this.makeBot(p) : new Remote(this.world, p, this.teams[p.team])));
+    this.agents = m.players.filter((p) => p.id !== this.myId).map((p) => (p.bot && this.isHost ? this.makeBot(p) : new Remote(this.world, p, this.teams[p.team], this.g)));
     if (this.co) this.co.agents = this.agents.filter((a) => a.isAI);
     this.active = true;
     this.t = 0;
@@ -778,6 +804,7 @@ export class Lobby {
       arenas: o.arenas,
       getName: () => this.name,
       getClass: () => o.getClass(),
+      getMe: () => o.getMe?.(),
       lobby: (l) => { this.view = this.online.inRoom ? 'room' : 'menu'; this.render(); },
       status: (s) => { this.msg = s; this.render(); },
       onStart: (info) => { this.root.classList.add('hidden'); o.onStart(info); },
@@ -830,7 +857,9 @@ export class Lobby {
           t.append(el('b', null, (l.teamNames || [])[k] || `TEAM ${k + 1}`));
           for (const p of l.players.filter((q) => q.team === k)) {
             const row = el('div', `nt-p${p.id === on.myId ? ' me' : ''}`);
-            row.append(el('span', null, p.name + (p.id === on.myId ? ' (YOU)' : '')), el('i', null, CLASSES[p.cls]?.name || ''));
+            const nm = el('span', null, p.name + (p.id === on.myId ? ' (YOU)' : ''));
+            if (!p.bot) nm.insertAdjacentHTML('afterbegin', badgeHTML(p.lv || 1) + ' ');
+            row.append(nm, el('i', null, CLASSES[p.cls]?.name || ''));
             if (on.isHost && l.max > 2) row.append(btn('nt-swap', '⇄', () => on.swapTeam(p.id)));
             t.append(row);
           }

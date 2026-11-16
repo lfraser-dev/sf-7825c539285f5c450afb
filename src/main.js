@@ -3,7 +3,7 @@ import { World, moveBoxTo } from './world.js';
 import { Input } from './input.js';
 import { Player } from './player.js';
 import { Weapon, setHandLook } from './weapon.js';
-import { WEAPONS, CASE_ORDER } from './weapons.js';
+import { WEAPONS, CASE_ORDER, VARIANT_OF } from './weapons.js';
 import { Effects } from './effects.js';
 import { Sounds } from './audio.js';
 import { Dummy, DestructibleWall, Workbench, gunCrates } from './props.js';
@@ -270,9 +270,16 @@ function switchTo(i) {
 }
 
 // one primary and one sidearm: a sidearm always goes in slot 2, anything else replaces your primary
+// the test range has every gun, whatever your level: each crate gun also hands out its variants. Take the gun,
+// then press E on it again to swap through them (SF-47 -> SF-47 SD -> SF-47 HB -> SF-47 ...).
+const gunFamily = (id) => { const base = VARIANT_OF[id] || id; return [base, ...Object.keys(VARIANT_OF).filter((v) => VARIANT_OF[v] === base)]; };
+function nextInCase(caseId) {
+  const fam = gunFamily(caseId), held = slots[SIDEARMS.includes(caseId) ? 1 : 0]?.def.id, i = fam.indexOf(held);
+  return i < 0 ? caseId : fam[(i + 1) % fam.length];
+}
 function pickUp(caseDef) {
   if (launcherW) putAwayLauncher(false);
-  const def = defFor(caseDef.id);
+  const def = defFor(nextInCase(caseDef.id));
   const slot = SIDEARMS.includes(def.id) ? 1 : 0;
   if (slots[slot].def.id === def.id) { slots[slot].ammo = def.mag; if (current !== slot) switchTo(slot); else weapon().equip(); sounds.pickup(); return; }
   slots[slot] = new Weapon(def);
@@ -1769,7 +1776,8 @@ function updateHud(dt, fovRad) {
     hud.prompt.style.opacity = 1;
   } else if (nearCase) {
     const d = nearCase.def;
-    hud.prompt.innerHTML = `<kbd>E</kbd> ${weapon().def.id === d.id ? 'REFILL' : 'TAKE'} <b>${d.name}</b> <span>${d.type}</span>`;
+    const nx = WEAPONS[nextInCase(d.id)], fam = gunFamily(d.id).length;
+    hud.prompt.innerHTML = `<kbd>E</kbd> ${nx.id === d.id && fam === 1 && weapon().def.id === d.id ? 'REFILL' : nx.id === d.id ? 'TAKE' : 'SWAP TO'} <b>${nx.name}</b> <span>${fam > 1 ? `${d.type} · ${fam} VERSIONS, PRESS E AGAIN` : d.type}</span>`;
     hud.prompt.style.opacity = 1;
   } else hud.prompt.style.opacity = 0;
 
@@ -3175,4 +3183,4 @@ function frameBody(now) {
 requestAnimationFrame(frame);
 
 // handy for debugging from the console / automated tests
- window.game = { kf: (...a) => killFeed(...a), daily, gainXp: (n, l) => gainXp(n, l), progress, skinLive: (h, s) => { skinHeat = h; skinStreak = s; }, startTakedown, updateTakedown, findDowned, takedownParts, get td() { return td; }, get deathT() { return deathT; }, useBuff, get buff() { return { kind: buffKind, t: buffT }; }, setThrow: (k) => { equippedThrow = k; throwCharges = 2; }, useThrowable, get throwCharges() { return throwCharges; }, get flashT() { return flashT; }, heavy, useHeavy, applyClass, useGadget, useTether, useCloak, get cloakT() { return cloakT; }, get launcherW() { return launcherW; }, gadgets, get burning() { return burning; }, lobby, online, get tdm() { return tdm; }, batches, renderer, map, ARENAS, get stadium() { return stadium; }, setArena: (i) => { stadium = ARENAS[i]; }, lifts, hooks: botHooks, updateFall, hookTarget, fallTop: () => fallTop, breakGlass, updateCombat, startMatch: (m) => startMatch(m), enterStadium, where: () => where, sr: () => showroomChar, cosmetics, refreshGuns, classLo, renderMenu, showTab, enterRange, cs: () => cutscene, botMgr, elevator, damagePlayer, pressConsole, setTimeScale: (v) => { timeScale = v; }, bench, openBench, closeBench, loadouts, applyLoadout, course, player, slots, weapon, world, stats, effects, dummies, walls, cases, input, start, setPlaying, resetRange, switchTo, pickUp, WEAPONS };
+ window.game = { kf: (...a) => killFeed(...a), daily, gainXp: (n, l) => gainXp(n, l), progress, skinLive: (h, s) => { skinHeat = h; skinStreak = s; }, startTakedown, updateTakedown, findDowned, takedownParts, get td() { return td; }, get deathT() { return deathT; }, nextInCase, useBuff, get buff() { return { kind: buffKind, t: buffT }; }, setThrow: (k) => { equippedThrow = k; throwCharges = 2; }, useThrowable, get throwCharges() { return throwCharges; }, get flashT() { return flashT; }, heavy, useHeavy, applyClass, useGadget, useTether, useCloak, get cloakT() { return cloakT; }, get launcherW() { return launcherW; }, gadgets, get burning() { return burning; }, lobby, online, get tdm() { return tdm; }, batches, renderer, map, ARENAS, get stadium() { return stadium; }, setArena: (i) => { stadium = ARENAS[i]; }, lifts, hooks: botHooks, updateFall, hookTarget, fallTop: () => fallTop, breakGlass, updateCombat, startMatch: (m) => startMatch(m), enterStadium, where: () => where, sr: () => showroomChar, cosmetics, refreshGuns, classLo, renderMenu, showTab, enterRange, cs: () => cutscene, botMgr, elevator, damagePlayer, pressConsole, setTimeScale: (v) => { timeScale = v; }, bench, openBench, closeBench, loadouts, applyLoadout, course, player, slots, weapon, world, stats, effects, dummies, walls, cases, input, start, setPlaying, resetRange, switchTo, pickUp, WEAPONS };

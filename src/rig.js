@@ -30,6 +30,7 @@ export class Builder {
 
   // tapered capsule from A (radius r1) to C (radius r2)
   capsule(A, C, r1, r2, color, em = 0) {
+    if (this.k !== 1 && this.k) { r1 *= this.k; r2 *= this.k; }      // k: bulk factor for the section being built
     const d = [C[0] - A[0], C[1] - A[1], C[2] - A[2]], L = Math.hypot(...d);
     const rm = Math.max(r1, r2);
     const scale = [2 * rm, 2 * rm, L + 2 * rm];
@@ -39,14 +40,17 @@ export class Builder {
   }
 
   ellipsoid(pos, b, size, color, em = 0) {
+    if (this.k !== 1 && this.k) size = size.map((v) => v * this.k);
     this.out.push({ model: this.basisModel(pos, b, size), scale: size, color, emissive: em, shape: 'sphere', mat: this.mat });
   }
 
   rbox(pos, b, size, r, color, em = 0) {
+    if (this.k !== 1 && this.k) { size = size.map((v) => v * this.k); r *= this.k; }
     this.out.push({ model: this.basisModel(pos, b, size), scale: size, color, emissive: em, shape: r, mat: this.mat });
   }
 
   cyl(pos, b, size, color, em = 0) {   // cylinder along the basis' back axis
+    if (this.k !== 1 && this.k) size = size.map((v) => v * this.k);
     this.out.push({ model: this.basisModel(pos, b, size), scale: size, color, emissive: em, shape: 'cyl', mat: this.mat });
   }
 }

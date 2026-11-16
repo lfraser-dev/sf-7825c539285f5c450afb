@@ -70,6 +70,8 @@ export class Agent {
 
   update(dt, g) {
     const co = this.co, b = this.bot;
+    // a human body in the team's kit, holding a real gun (see fighter.js)
+    if (!b.human && g.humanFor) { const h = g.humanFor(this); if (h) Object.assign(b, { human: h.skin, gunDef: h.gunDef, gunPartsOf: h.gunPartsOf }); }
     if (!b.alive) {
       if (!this.dead) {
         this.dead = true;

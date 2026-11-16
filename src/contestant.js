@@ -59,6 +59,8 @@ export const SKINS = {
 // ---------------------------------------------------------------- poses
 // Each returns targets in character space (feet at origin, facing -z). t = time, talk = 0..1
 const L = 0.47, UA = 0.3, FA = 0.29;
+// bulk: how much thicker than the base rig each part of the body is drawn (a sturdier, less stick-like build)
+const LEG_K = 1.16, TORSO_K = 1.1, ARM_K = 1.24, HEAD_K = 1.15;
 function standLegs(p, spread = 0.15, stagger = 0) {
   p.feet = [[-spread, 0.05, stagger], [spread, 0.05, -stagger]];
 }
@@ -216,12 +218,22 @@ export class Contestant {
 
   parts() {
     const S = this.skin, b = S.build || 1;
-    const P = POSES[this.pose](this.t, this.talk);
+    const P = this.poseFn ? this.poseFn() : POSES[this.pose](this.t, this.talk);
     const bd = (this.bd = this.bd || new Builder()).reset();
     bd.mat = 'cloth';
     const cy = Math.cos(this.yaw), sy = Math.sin(this.yaw);
-    const Wd = (v) => [cy * v[0] + sy * v[2], v[1], -sy * v[0] + cy * v[2]];
-    const W = (v) => { const d = Wd(v); return [this.pos[0] + d[0], this.pos[1] + d[1], this.pos[2] + d[2]]; };
+    // an optional whole-body transform before the yaw (used in matches): pitch about a point up the body (falling
+    // over, flips) and an offset (lunges, jumps)
+    const R = this.root, rc = R ? Math.cos(R.rot) : 1, rs = R ? Math.sin(R.rot) : 0, rp = R ? R.pivot : 0, ro = R ? R.off : null;
+    const Wd = (v) => {
+      const y = R ? v[1] * rc + v[2] * rs : v[1], z = R ? v[2] * rc - v[1] * rs : v[2];
+      return [cy * v[0] + sy * z, y, -sy * v[0] + cy * z];
+    };
+    const W = (v) => {
+      let x = v[0], y = v[1], z = v[2];
+      if (R) { const dy = y - rp; y = rp + dy * rc + z * rs + ro[1]; z = z * rc - dy * rs + ro[2]; x += ro[0]; }
+      return [this.pos[0] + cy * x + sy * z, this.pos[1] + y, this.pos[2] - sy * x + cy * z];
+    };
     // live fabrics (see the end): remember which colours belong to them, including shaded variants
     const fxMap = new Map();
     for (const [c, k] of [[S.jacket, S.fxJacket], [S.top, S.fxTop], [S.bottom, S.fxBottom]]) if (c && k && !fxMap.has(c)) fxMap.set(c, [k, 0.6]);
@@ -249,9 +261,9 @@ export class Contestant {
     // z of the front of the outermost torso layer at torso-space (x, y): lets neckwear lie on the clothes
     const layerK = S.jacket ? (S.jacketStyle === 'puffer' ? 1.38 : 1.09) : S.vest ? (S.vestStyle === 'waistcoat' ? 1.08 : 1.36) : 1;
     const chestFront = (x, y) => {
-      const ex = x / (0.19 * b * layerK), ey = (y - 0.42) / (0.2 * layerK);
+      const ex = x / (0.19 * b * layerK * TORSO_K), ey = (y - 0.42) / (0.2 * layerK * TORSO_K);
       const q = 1 - ex * ex - ey * ey;
-      return q > 0 ? 0.006 - 0.116 * b * layerK * Math.sqrt(q) : 0.006;
+      return q > 0 ? 0.006 - 0.116 * b * layerK * TORSO_K * Math.sqrt(q) : 0.006;
     };
     // ring of capsules around the torso at height y (torso space), ellipse radii rx / rz centred on z0
     const ring = (y, rx, rz, z0, r, color, n = 16, yFront = 0) => {
@@ -266,11 +278,13 @@ export class Contestant {
     };
 
     // ---- legs: tapered thigh + shin, knee pad, boot
+    bd.k = LEG_K;
     [-1, 1].forEach((side, i) => {
       const hip = add3(pelvis, [side * 0.1 * b, -0.06, 0]);
       const foot = P.feet[i];
       const knee = ik(hip, foot, L, L, P.kneeHint || [0, 0.2, -1]);
       const ankle = add3(foot, [0, 0.07, 0.02]);
+      if (side > 0) this.footW = W(foot);
       const shinTop = lerp3(knee, ankle, 0.04);
       bd.ellipsoid(W(add3(hip, [-side * 0.012, 0.01, 0])), HB0, [0.176 * b, 0.18 * b, 0.18 * b], low);         // hip joint fill
       bd.capsule(W(hip), W(knee), 0.095 * b, 0.064 * b, low);
@@ -282,7 +296,7 @@ export class Contestant {
       const legPt = (t, ang, out = 0.004) => {
         const onThigh = t <= 1, u = onThigh ? t : t - 1;
         const c = onThigh ? lerp3(hip, knee, u) : lerp3(knee, ankle, u * 0.8);
-        const r = (onThigh ? 0.095 + (0.064 - 0.095) * u : 0.064 + (0.054 - 0.064) * u) * b + out;
+        const r = (onThigh ? 0.095 + (0.064 - 0.095) * u : 0.064 + (0.054 - 0.064) * u) * b * LEG_K + out;
         return [c[0] + side * Math.cos(ang) * r, c[1], c[2] - Math.sin(ang) * r];
       };
       if (legSt === 'cargo' || legSt === 'camo') {
@@ -341,6 +355,7 @@ export class Contestant {
     });
 
     // ---- hips, belt, torso
+    bd.k = TORSO_K;
     bd.ellipsoid(T([0, -0.01, 0.005]), TB, [0.335 * b, 0.25, 0.235 * b], low);                                 // pelvis
     if (!S.zip) {
       bd.rbox(T([0, 0.085, 0]), TB, [0.315 * b, 0.045, 0.215 * b], 0.02, [0.1, 0.09, 0.08]);
@@ -348,6 +363,7 @@ export class Contestant {
     }
     bd.capsule(T([0, 0.06, 0.0]), T([0, 0.3, 0.0]), 0.128 * b, 0.142 * b, top);                                  // waist
     bd.ellipsoid(T([0, 0.07, 0.004]), TB, [0.3 * b, 0.16, 0.235 * b], top);                                     // waist-to-hip blend
+    bd.ellipsoid(T([0, 0.27, 0.004]), TB, [0.348 * b, 0.36, 0.228 * b], top);                                    // mid-torso: one smooth taper from chest to waist
     bd.ellipsoid(T([0, 0.42 + breathe, 0.006]), TB, [0.38 * b, 0.4, 0.232 * b], top);                           // ribcage + chest in one smooth shape
     for (const sx of [-1, 1]) bd.capsule(T([sx * 0.06 * b, 0.56, 0.01]), T([sx * 0.2 * b, 0.505, 0.006]), 0.068 * b, 0.064 * b, S.jacket || top);   // sloped shoulders
 
@@ -518,13 +534,14 @@ export class Contestant {
     const neckB = T([0, 0.57, 0.01]), neckT = T([0, 0.68, 0.0]);
     bd.capsule(neckB, neckT, 0.058, 0.052, skin);
     bd.ellipsoid(T([0, 0.565, 0.015]), TB, [0.22 * b, 0.1, 0.16 * b], S.vest || S.jacket || top);    // trapezius / shoulder line
-    const headC = T([0, 0.775, -0.01]);
+    const headC = T([0, 0.795, -0.01]);
+    bd.k = HEAD_K;
     let HB = { R: TB.R, U: TB.U, B: TB.B };
     // head yaw then pitch, relative to the torso
     const c1 = Math.cos(hy), s1 = Math.sin(hy);
     HB = { U: HB.U, R: HB.R.map((v, i) => v * c1 - HB.B[i] * s1), B: HB.B.map((v, i) => v * c1 + HB.R[i] * s1) };
     HB = pitchBasis(HB, hp + lean * 0.6);
-    const H = (v) => at(headC, HB, v);
+    const H = (v) => at(headC, HB, [v[0] * HEAD_K, v[1] * HEAD_K, v[2] * HEAD_K]);
     bd.ellipsoid(H([0, -0.004, 0.005]), HB, [0.19, 0.252, 0.215], skin);                  // head: one smooth egg, jaw included
     bd.ellipsoid(H([0, -0.088, -0.05]), HB, [0.05, 0.034, 0.04], skin);                     // chin
     const masked = S.head === 'mask' || S.head === 'facemask', visored = S.head === 'helmet';
@@ -603,17 +620,22 @@ export class Contestant {
       P.hands = [toChar(d.foreGrip || [0, -0.04, -0.25]), toChar(d.grip || [0, -0.08, 0.1])];
     }
     // ---- arms (solved to the hands): tapered upper arm + forearm, glove with thumb
+    bd.k = ARM_K;
     [-1, 1].forEach((side, i) => {
-      const sh = up([side * 0.22 * b, 0.52, 0]);
+      const sh = up([side * 0.25 * b, 0.525, 0]);
       const hand = P.hands[i];
       const out_ = P.elbowOut || 0.8;
       const elbow = ik(sh, hand, UA, FA, P.armHint ? P.armHint[i] : [side * out_, -0.7, 0.35]);
       const sleeve = S.jacket || top;
       const wrist = lerp3(elbow, hand, 0.84);
+      // where the hands and elbows ended up (props and effects attach to these)
+      if (i === 0) this.armW = { hL: W(hand), eL: W(elbow) }; else { this.armW.hR = W(hand); this.armW.eR = W(elbow); }
+      // a glowing team band round the upper arm (in matches), so sides read at a glance whatever the outfit
+      if (S.teamBand) bd.capsule(W(lerp3(sh, elbow, 0.52)), W(lerp3(sh, elbow, 0.6)), (S.jacket ? 0.074 : 0.064) * b, (S.jacket ? 0.072 : 0.062) * b, S.teamBand, 0.8);
       // shoulder: a tapered cap that runs from the shoulder joint down the arm, so the shoulder flows into the arm
-      const delt0 = up([side * 0.185 * b, 0.535, 0.004]);
+      const delt0 = up([side * 0.205 * b, 0.538, 0.004]);
       const sw0 = S.jacket ? (S.jacketStyle === 'puffer' ? 0.03 : 0.008) : 0;
-      bd.capsule(W(delt0), W(lerp3(sh, elbow, 0.32)), (0.07 + sw0) * b, (0.058 + sw0) * b, S.jacket || top);
+      bd.capsule(W(delt0), W(lerp3(sh, elbow, 0.4)), (0.06 + sw0) * b, (0.05 + sw0) * b, S.jacket || top);
       const shortSl = !S.jacket && topSt === 'tee';
       if (shortSl) {
         bd.capsule(W(sh), W(elbow), 0.05 * b, 0.042 * b, skin);
@@ -673,6 +695,7 @@ export class Contestant {
 
     // ---- live fabrics: a jacket, top or trousers painted by the shader (same patterns as the live gun skins).
     // The part's colour then carries [energy, brightness, 0] instead of a colour.
+    bd.k = 1;
     if (fxMap.size) {
       const e = 0.3 + 0.25 * Math.sin(this.t * 1.3);
       for (const p of bd.out) {

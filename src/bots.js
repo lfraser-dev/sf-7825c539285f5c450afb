@@ -4,6 +4,7 @@ import { makeBox, moveBoxTo } from './world.js';
 import { compose, mat4, norm, clamp, anglesFor } from './math.js';
 import { Builder, at, pitchBasis, basisFrom } from './rig.js';
 import { takedownPose } from './takedown.js';
+import { humanParts } from './fighter.js';
 
 const DARK = [0.16, 0.17, 0.19];
 const BLACK = [0.08, 0.08, 0.09];
@@ -320,6 +321,7 @@ export class Bot {
     const dyingT = this.dying;
     if (!this.alive && (dyingT < 0 || (dyingT > 0.75 && !this.downed))) return [];     // downed: stays lying there
     if (this.alive && !this.visible) return [];
+    if (this.human) return humanParts(this, dyingT);        // people in matches: the human rig (fighter.js)
     const t = this.t, s = this.sc, b = t.build;
     const g = this.moving, w = this.walk;
     const lv = this.localVel, ls = Math.hypot(lv[0], lv[1]);

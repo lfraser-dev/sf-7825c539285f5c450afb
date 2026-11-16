@@ -233,7 +233,7 @@ function xpTick(text) {
 function myLook() {
   const o = buildOutfit(cosmetics, classLo.cls), w = classWeapons()[0];
   const r = (c) => (Array.isArray(c) ? c.map((v) => Math.round(v * 100) / 100) : null);
-  return { m: r(o.jacket || o.vest || o.top), h: r(o.head && o.head !== 'hair' ? o.headCol : o.hair), b: r(o.bottom), s: r(o.shoes), g: r(o.gloves), w, a: loadouts[w] || {}, sk: cosmetics.equip[classLo.cls].wskin || '', fx: o.fxJacket || (!o.jacket && !o.vest ? o.fxTop : 0) || 0 };
+  return { m: r(o.jacket || o.vest || o.top), h: r(o.head && o.head !== 'hair' ? o.headCol : o.hair), b: r(o.bottom), s: r(o.shoes), g: r(o.gloves), w, a: loadouts[w] || {}, sk: cosmetics.equip[classLo.cls].wskin || '', eq: { ...cosmetics.equip[classLo.cls] }, fx: o.fxJacket || (!o.jacket && !o.vest ? o.fxTop : 0) || 0 };
 }
 const cases = gunCrates(world, CASE_ORDER.map((id) => defFor(id)), map.bench.pos);   // guns jammed in two crates by the workbench
 const workbench = new Workbench(world, map.bench.pos);
@@ -721,6 +721,9 @@ function makeMyBody(pos, yaw) {
   b.removed = true; b.state = 'wait'; b.landed = true; b.dropT = 1;
   const rgb = tdm.myTeam?.rgb;
   if (rgb) { try { const lk = myLook(); b.pal = lookPalette(lk, rgb); b.fxTex = lk.fx || 0; } catch { b.pal = teamPalette(rgb); } }   // in my outfit
+  b.human = { ...buildOutfit(cosmetics, classLo.cls), teamBand: rgb || [1, 1, 1] };
+  b.gunDef = slots[0]?.def || kitGun(classLo.cls);
+  b.gunPartsOf = (def, m) => Weapon.worldParts(def, m);
   return b;
 }
 function findDowned() {
@@ -1027,7 +1030,34 @@ function takenDown(name, kind) {
   sounds.hit?.(); sounds.crumble?.();
 }
 
+// ---------- people in matches ----------
+// Everyone in a match has a human body (fighter.js). The AI wears its team's kit: jersey and helmet in the team
+// colour over dark trousers. Players wear their real outfit (sent online as the items they have on) plus a glowing
+// team armband. Each holds a real gun model.
+const kitGuns = {};
+function kitGun(cls) {
+  const id = CLASSES[cls]?.weapons[0] || 'ar';
+  return (kitGuns[id] ||= buildDef(WEAPONS[id], {}));
+}
+function humanFor(who) {
+  const cls = CLASSES[who.cls] ? who.cls : 'medium', team = who.team?.rgb || [0.8, 0.2, 0.15];
+  const dark = (k) => team.map((v) => v * k);
+  let skin;
+  if (who.look?.eq) {
+    // another player: rebuild their outfit from the items they're wearing
+    const eq = {};
+    for (const sl of CSLOTS) { const id = who.look.eq[sl.id]; eq[sl.id] = ITEMS[id]?.slot === sl.id ? id : null; }
+    for (const sl of CSLOTS) if (!eq[sl.id]) eq[sl.id] = Object.keys(ITEMS).find((id) => ITEMS[id].slot === sl.id);
+    skin = { ...buildOutfit({ equip: { [cls]: eq } }, cls), teamBand: team };
+  } else {
+    skin = { ...CLASSES[cls].skin, build: CLASSES[cls].build, top: team, topStyle: 'zip', zip: true, jacket: null, vest: [0.1, 0.1, 0.12], vestStyle: 'field',
+      bottom: [0.1, 0.1, 0.12], legStyle: 'cargo', shoes: [0.08, 0.08, 0.09], shoeStyle: 'boot', gloves: [0.1, 0.1, 0.11], gloveStyle: 'tactical',
+      head: 'helmet', headCol: dark(0.9), visor: [0.04, 0.04, 0.05], accent: dark(1.1) };
+  }
+  return { skin, gunDef: kitGun(cls), gunPartsOf: (def, m) => Weapon.worldParts(def, m) };
+}
 const botHooks = {
+  humanFor: (who) => humanFor(who),
   settleBody: (b, dt) => settleBody(world, b, dt),
   player,
   hitPlayer: (dmg, bot, from) => { player.lastHitBy = bot.agent || null; damagePlayer(dmg, from, bot.name); },
@@ -1962,6 +1992,7 @@ const netHooks = {
     try { return skinDef(buildDef(WEAPONS[look.w], look.a || {}), ITEMS[look.sk]?.slot === 'wskin' ? ITEMS[look.sk].gun : null); } catch { return null; }
   },
   gunPartsOf: (def, m) => Weapon.worldParts(def, m),
+  humanFor: (who) => humanFor(who),
   takenDown: (name, kind) => takenDown(name, kind),
   // another player (or the host's bot) started a takedown: play the animation on their body
   remoteTakedownStart: (att, victim, kind) => {

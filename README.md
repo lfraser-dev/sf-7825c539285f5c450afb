@@ -2,6 +2,8 @@
 
 A browser FPS in the spirit of The Finals, with a white grid sandbox look.
 
+**Build 0.59: a sidearm crate.** The test range used to mix pistols in with the railgun and machine guns in the second crate. Now the two big crates hold only primaries (12 each) and a new small crate at the far end holds only sidearms (P-19, MP-9, BX-9, HC-50, R-357 and their variants).
+
 **Build 0.58: every gun in the test range.** The crates by the workbench now hand out all 58 guns whatever your level: take a gun, then press E on it again to swap through its variants (SF-47, SF-47 SD, SF-47 HB...). Matches are unchanged: guns there still unlock by level.
 
 **Build 0.57: people fall, faces and hair, 29 gun variants, 6 abilities.** People in matches no longer shatter into blocks. When they go down their knees buckle, they topple with a small bounce and end in one of three sprawls; a finished-off body bursts into coins. Getting shot staggers them (the hit shoulder whips round, the head snaps, the gun dips). Customization has four new tabs: HAIRSTYLE (12, shown with BARE HEAD), HAIR COLOUR, FACE (4 shapes) and BEARD (7); the AI get a random skin tone, face and beard each. 29 gun variants (`tune()` in `weapons.js`): the same models in a new finish with different stats, such as SF-47 SD (quiet, steady), SF-47 HB (slow, hard-hitting), KV-45 EXTENDED, DB-2 SAWN-OFF, LH-7 LIGHT and ROTARY-X TURBO, unlocked by level. Six new abilities: BLINK and STIM (Light), RECON PULSE and OVERDRIVE (Medium), FORTIFY and BULL CHARGE (Heavy). Two new throwables: MOLOTOV and CLUSTER GRENADE.

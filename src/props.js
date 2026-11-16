@@ -348,10 +348,11 @@ export function gunCrates(world, defs, benchPos) {
   const at = (x, y, z, sx, sy, sz, o) => add([x - sx / 2, y, z - sz / 2], [x + sx / 2, y + sy, z + sz / 2], o);
   const deco = (min, max, o) => add(min, max, { solid: false, noShadow: true, ...o });
   const [bx, by, bz] = benchPos;
-  const W = 3.1, D = 1.25, Hh = 0.62, t = 0.05;
-  const crates = [[bx - 3.65, bz + 0.62], [bx + 3.65, bz + 0.62]];
+  const D = 1.25, Hh = 0.62, t = 0.05;
+  // two big crates of primaries either side of the bench, and a small one of sidearms at the far right
+  const groups = Array.isArray(defs[0]) ? defs : [defs.slice(0, Math.ceil(defs.length / 2)), defs.slice(Math.ceil(defs.length / 2))];
+  const crates = [[bx - 3.65, bz + 0.62, 3.1], [bx + 3.65, bz + 0.62, 3.1], [bx + 7.0, bz + 0.62, 1.9]].slice(0, groups.length);
   const items = [];
-  const half = Math.ceil(defs.length / 2);
   // stencil "text": a row of short bars of varying width, like letters at a distance
   const stencil = (x0, y0, z, w, h, seed, col = STEN, face = -1) => {
     let x = x0, k = seed;
@@ -383,7 +384,7 @@ export function gunCrates(world, defs, benchPos) {
     deco([x - sx / 2 - 0.001, y + 0.06, z - sz / 2 - 0.004], [x + sx / 2 + 0.001, y + 0.085, z - sz / 2 + 0.001], { color: STEN, emissive: 0.05 });
     return [x, y + 0.2, z];
   };
-  crates.forEach(([cx, cz], ci) => {
+  crates.forEach(([cx, cz, W], ci) => {
     const x0 = cx - W / 2, x1 = cx + W / 2, z0 = cz - D / 2, z1 = cz + D / 2, y = by;
     // the crate: painted planks (wood grain under olive paint), a darker plinth, steel corners and bands
     add([x0, y, z0], [x1, y + 0.08, z1], { color: OD_D, tex: 12, mat: 'paint' });
@@ -396,7 +397,7 @@ export function gunCrates(world, defs, benchPos) {
     for (const yy of [0.18, 0.46]) deco([x0 - 0.012, y + yy, z0 - 0.012], [x1 + 0.012, y + yy + 0.04, z0 + 0.001], { color: STEELD, mat: 'metal' });     // steel bands
     deco([x0 - 0.012, y + Hh - 0.03, z0 - 0.012], [x1 + 0.012, y + Hh, z1 + 0.012], { color: OD_D, mat: 'paint' });                                     // rim
     // stencils on the front: a big line of "text", a smaller one, and a yellow hazard band at the end
-    stencil(x0 + 0.18, y + 0.27, z0 - 0.012, 1.3, 0.07, 17 + ci * 31);
+    stencil(x0 + 0.18, y + 0.27, z0 - 0.012, Math.min(1.3, W - 0.75), 0.07, 17 + ci * 31);
     stencil(x0 + 0.18, y + 0.37, z0 - 0.012, 0.8, 0.04, 91 + ci * 7, STENW);
     deco([x1 - 0.42, y + 0.26, z0 - 0.016], [x1 - 0.14, y + 0.42, z0 - 0.001], { color: STEN, emissive: 0.06 });
     for (let k = 0; k < 4; k++) deco([x1 - 0.4 + k * 0.07, y + 0.26, z0 - 0.018], [x1 - 0.37 + k * 0.07, y + 0.42, z0 - 0.015], { color: [0.08, 0.08, 0.08] });
@@ -408,10 +409,10 @@ export function gunCrates(world, defs, benchPos) {
     }
     // the lid, propped open against the wall behind, with its own stencil and hinges
     add([x0 + 0.05, y + 0.05, z1 + 0.04], [x1 - 0.05, y + 0.95, z1 + 0.1], { color: OD, tex: 12, mat: 'paint', solid: false });
-    stencil(x0 + 0.3, y + 0.62, z1 + 0.039, 1.6, 0.09, 53 + ci * 13);
+    stencil(x0 + 0.3, y + 0.62, z1 + 0.039, Math.min(1.6, W - 0.6), 0.09, 53 + ci * 13);
     for (const xx of [x0 + 0.4, x1 - 0.4]) at(xx, y + Hh - 0.03, z1 + 0.04, 0.1, 0.06, 0.04, { color: STEELD, mat: 'metal', solid: false });
     // the guns: two rows, jammed in at odd angles
-    const mine = defs.slice(ci * half, ci * half + half);
+    const mine = groups[ci];
     const cols = Math.ceil(mine.length / 2);
     mine.forEach((def, i) => {
       const row = i % 2, col = Math.floor(i / 2);

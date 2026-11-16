@@ -25,6 +25,8 @@ export const HEAVY_STATS = {
   frag_t: { dmg: 90, r: 4.5, fuse: 1.7, name: 'FRAG GRENADE', col: [0.33, 0.37, 0.22], bounce: true },
   smoke: { fuse: 1.1, r: 4.8, dur: 12, name: 'SMOKE GRENADE', col: [0.78, 0.78, 0.8], bounce: true },
   flash: { fuse: 1.3, name: 'FLASHBANG', col: [0.95, 0.95, 0.98], bounce: true },
+  molotov: { dmg: 25, r: 3.2, fire: 5, burn: { dps: 15, dur: 2 }, name: 'MOLOTOV', col: [1, 0.45, 0.1] },
+  cluster_t: { dmg: 20, r: 2.2, fuse: 1.5, bomblets: 4, name: 'CLUSTER GRENADE', col: [0.25, 0.6, 1], bounce: true },
   mines: { cd: 20, dmg: 70, r: 3.2, trig: 2.2, name: 'PROXIMITY MINES' },
   turret_mg: { cd: 24, range: 30, rate: 0.12, dmg: 8, spread: 0.035, turn: 7, name: 'MG TURRET', reach: 0.7 },
   turret_heavy: { cd: 28, range: 45, rate: 1.1, dmg: 45, spread: 0.006, turn: 3.5, name: 'CANNON TURRET', reach: 0.86 },
@@ -159,8 +161,8 @@ export class Heavy {
     this.grenades.splice(this.grenades.indexOf(gr), 1);
     if (!gr.mine) return;             // the owner sends the explosion
     if (gr.kind === 'smoke' || gr.kind === 'flash') { this.special(gr.kind, at, gr.mine); return; }
-    this.boom(at, s.r, s.dmg, gr.name, gr.mine, gr.kind === 'gl_fire' ? 'fire' : gr.kind === 'bomblet' || gr.kind === 'gl_cluster' ? 'mini' : 'frag');
-    if (gr.kind === 'gl_cluster') {
+    this.boom(at, s.r, s.dmg, gr.name, gr.mine, s.fire ? 'fire' : gr.kind === 'bomblet' || s.bomblets ? 'mini' : 'frag');
+    if (s.bomblets) {
       // five bomblets thrown out in a ring
       for (let k = 0; k < s.bomblets; k++) {
         const a = (k / s.bomblets) * Math.PI * 2 + Math.random() * 0.6, sp = 3.5 + Math.random() * 3;

@@ -1,3 +1,4 @@
+import { VARIANT_OF } from './weapons.js';
 // Weapon attachments. Each attachment changes stats and adds/edits box parts on the gun model.
 // buildDef(base, loadout) returns a new weapon definition with everything applied.
 
@@ -94,6 +95,13 @@ export const STYLE = { burst: 'ar', dmr: 'ar', mp: 'pistol', revolver: 'pistol',
   kv: 'smg', bullpup: 'ar', lever: 'sniper', minigun: 'lmg', double: 'shotgun',
   gl: 'ar', tg: 'ar', hx17: 'ar', zu9: 'smg', amr: 'sniper', rt7: 'shotgun', hc50: 'pistol', rk74: 'lmg',
   kr45: 'smg', pdx: 'smg', rg1: 'sniper', bruiser: 'lmg', cr56: 'ar', slug: 'shotgun', bx9: 'pistol' };
+// variants take everything from the gun they're built on: mounts, slots, range and attachment family
+for (const [id, base] of Object.entries(VARIANT_OF)) {
+  if (MOUNT[base]) MOUNT[id] = MOUNT[base];
+  if (NO_SLOT[base]) NO_SLOT[id] = NO_SLOT[base];
+  if (RANGE[base] != null) RANGE[id] = RANGE[base];
+  STYLE[id] = STYLE[base] || base;
+}
 const styleOf = (id) => STYLE[id] || id;
 
 const P = (name, c, s, col, extra = {}) => ({ name, c, s, col, ...extra });

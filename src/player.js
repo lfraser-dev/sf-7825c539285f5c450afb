@@ -80,6 +80,7 @@ export class Player {
       pad: { cd: 0, max: 14 },
       cloak: { cd: 0, max: 16 },
       heal: { cd: 0, max: 20 },
+      buff: { cd: 0, max: 15 },      // blink, stim, scan, overdrive, fortify, charge (one slot, each with its own cooldown)
     };
   }
 
@@ -87,7 +88,7 @@ export class Player {
   resetAbilities() {
     this.cancelAbilities();
     this.abil.dash.charges = DASH_CHARGES; this.abil.dash.t = 0;
-    this.abil.grapple.cd = 0; this.abil.slam.cd = 0; this.abil.barricade.cd = 0; this.abil.pad.cd = 0; this.abil.cloak.cd = 0; this.abil.heal.cd = 0;
+    this.abil.grapple.cd = 0; this.abil.slam.cd = 0; this.abil.barricade.cd = 0; this.abil.pad.cd = 0; this.abil.cloak.cd = 0; this.abil.heal.cd = 0; this.abil.buff.cd = 0;
   }
 
   get mantle() { return this.trav?.kind === 'mantle'; }
@@ -520,6 +521,7 @@ export class Player {
     } else a.dash.t = 0;
     if (!this.grapple || this.grapple.phase === 'miss') a.grapple.cd = Math.max(0, a.grapple.cd - dt);
     if (!this.slam) a.slam.cd = Math.max(0, a.slam.cd - dt);
+    a.buff.cd = Math.max(0, a.buff.cd - dt);
     a.barricade.cd = Math.max(0, a.barricade.cd - dt);
     a.pad.cd = Math.max(0, a.pad.cd - dt);
     for (const k of ['cloak', 'heal']) a[k].cd = Math.max(0, a[k].cd - dt);

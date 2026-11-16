@@ -146,7 +146,7 @@ export class Effects {
     for (const d of this.debris) {
       if (d.life < 0.5 || d.flame) continue;
       compose(this.m, d.pos, d.rot, d.size);
-      r.draw(this.m, d.size, d.color, 0, d.size[0] > 0.03 ? 1 : 0, d.emissive);
+      r.draw(this.m, d.size, d.color, 0, d.size[0] > 0.03 && !d.shape ? 1 : 0, d.emissive, 1, d.shape, d.mat);
     }
   }
 
@@ -160,7 +160,7 @@ export class Effects {
       }
       if (d.life >= 0.5) continue;
       compose(this.m, d.pos, d.rot, d.size);
-      r.draw(this.m, d.size, d.color, 0, 1, d.emissive, d.life / 0.5);
+      r.draw(this.m, d.size, d.color, 0, d.shape ? 0 : 1, d.emissive, d.life / 0.5, d.shape, d.mat);
     }
     for (const t of this.tracers) {
       // the tracer is a short streak travelling along the shot

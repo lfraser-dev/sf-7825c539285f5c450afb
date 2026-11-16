@@ -1385,4 +1385,68 @@ const BALANCE = {
 };
 for (const [id, b] of Object.entries(BALANCE)) Object.assign(WEAPONS[id], b);
 
+// ---------------------------------------------------------------- build 0.57: variants
+// Factory variants of the guns above: the same model in a new finish, tuned to play differently (a rapid one, a
+// heavy-barrel one, an extended-mag one...). `k` multiplies the base gun's stats; `set` overrides them outright.
+export const VARIANT_OF = {};
+function tune(id, base, name, finish, k = {}, set = {}) {
+  const w = clone(WEAPONS[base]);
+  const [body, accent] = finish;
+  for (const p of w.parts) {
+    if (p.m === 'glass' || p.m === 'brass') continue;
+    const mx = Math.max(...p.col), mn = Math.min(...p.col), lum = p.col[0] * 0.3 + p.col[1] * 0.59 + p.col[2] * 0.11;
+    if (p.em || mx - mn > 0.25) p.col = accent;                                         // stripes, lights and coloured furniture
+    else if (lum > 0.13) p.col = body.map((c) => Math.min(1, c * Math.min(1.7, 0.55 + lum * 1.9)));   // the body, keeping its light and dark panels
+  }
+  const mul = (key, round) => { if (k[key] != null && w[key] != null) w[key] = round ? Math.round(w[key] * k[key]) : +(w[key] * k[key]).toFixed(3); };
+  mul('dmg', true); mul('rpm', true); mul('mag', true); mul('reload'); mul('reloadEmpty'); mul('moveMul'); mul('adsSpeed');
+  if (k.moveMul != null && WEAPONS[base].moveMul == null) w.moveMul = k.moveMul;
+  if (k.recoil && w.recoil) w.recoil = { ...w.recoil, up: w.recoil.up * k.recoil, side: w.recoil.side * k.recoil };
+  if (k.spread && w.spread) w.spread = { ...w.spread, base: w.spread.base * k.spread, bloom: w.spread.bloom * k.spread, bloomMax: w.spread.bloomMax * k.spread };
+  if (k.sound && w.sound) w.sound = { ...w.sound, freq: w.sound.freq * k.sound, gain: w.sound.gain * (k.gain ?? 1) };
+  Object.assign(w, set, { id, name, style: WEAPONS[base].style || base });
+  WEAPONS[id] = w; VARIANT_OF[id] = base;
+}
+const F = {      // finishes: [body, accent]
+  night: [[0.09, 0.09, 0.1], [0.3, 0.9, 0.4]], sand: [[0.62, 0.52, 0.36], [0.1, 0.1, 0.11]], arctic: [[0.86, 0.88, 0.9], [0.2, 0.6, 1]],
+  forest: [[0.25, 0.32, 0.2], [0.95, 0.75, 0.2]], rust: [[0.5, 0.25, 0.14], [1, 0.8, 0.3]], navy: [[0.14, 0.2, 0.36], [1, 0.45, 0.1]],
+  wine: [[0.42, 0.1, 0.14], [0.9, 0.9, 0.92]], steel: [[0.52, 0.54, 0.58], [1, 0.15, 0.15]], violet: [[0.32, 0.18, 0.5], [0.3, 1, 0.9]],
+  hazard: [[0.9, 0.7, 0.1], [0.08, 0.08, 0.09]], teal: [[0.1, 0.42, 0.42], [1, 0.9, 0.3]], bone: [[0.8, 0.76, 0.66], [0.6, 0.1, 0.1]],
+};
+// rifles
+tune('ar_sd', 'ar', 'SF-47 SD', F.night, { dmg: 0.92, recoil: 0.7, sound: 0.6, gain: 0.55 });                    // quiet and steady
+tune('ar_hb', 'ar', 'SF-47 HB', F.sand, { dmg: 1.2, rpm: 0.8, recoil: 1.15, moveMul: 0.97 });                    // heavy barrel: slower, harder
+tune('burst_r', 'burst', 'BR-3 RAPID', F.navy, { rpm: 1.2, dmg: 0.9, recoil: 1.1 });
+tune('hx17_c', 'hx17', 'HX-17 CARBON', F.steel, { moveMul: 1.05, adsSpeed: 1.25, mag: 0.8 });
+tune('cr56_x', 'cr56', 'CR-56 RAPID', F.violet, { rpm: 1.19, dmg: 0.86, recoil: 1.1 });
+tune('dmr_h', 'dmr', 'FC-308 HEAVY', F.forest, { dmg: 1.18, rpm: 0.78, mag: 0.67, recoil: 1.2 });
+tune('bullpup_s', 'bullpup', 'BX-56 SHORT', F.hazard, { rpm: 1.1, moveMul: 1.04, spread: 1.25 });
+// SMGs
+tune('smg_r', 'smg', 'V9-S RAPTOR', F.wine, { rpm: 1.2, dmg: 0.86, mag: 0.9 });
+tune('kv_x', 'kv', 'KV-45 EXTENDED', F.teal, { mag: 1.6, reload: 1.2, reloadEmpty: 1.2, moveMul: 0.97 });
+tune('kr45_s', 'kr45', 'KR-45 SILENT', F.night, { dmg: 0.93, recoil: 0.75, sound: 0.6, gain: 0.5 });
+tune('pdx_a', 'pdx', 'PDX-57 ARCTIC', F.arctic, { dmg: 1.12, rpm: 0.88 });
+tune('zu9_h', 'zu9', 'ZU-9 HORNET', F.hazard, { rpm: 1.13, mag: 0.8, moveMul: 1.03 });
+// shotguns
+tune('shotgun_l', 'shotgun', 'SG-12 LONG TOM', F.forest, { spread: 0.62, rpm: 0.85, moveMul: 0.96 });               // tight pattern, reaches further
+tune('auto_s', 'autoshotgun', 'AS-20 SHORTY', F.rust, { rpm: 1.25, mag: 0.75, spread: 1.25, moveMul: 1.05 });
+tune('double_s', 'double', 'DB-2 SAWN-OFF', F.bone, { dmg: 1.2, spread: 1.5, moveMul: 1.06 });
+tune('rt7_t', 'rt7', 'RT-7 TACTICAL', F.navy, { mag: 1.3, spread: 0.85, reload: 1.1 });
+// long guns
+tune('sniper_l', 'sniper', 'LH-7 LIGHT', F.arctic, { dmg: 0.85, rpm: 1.3, moveMul: 1.05, adsSpeed: 1.25 });
+tune('rg1_c', 'rg1', 'RG-1 CAPACITOR', F.violet, { dmg: 1.3, rpm: 0.7, mag: 0.6 });
+tune('lever_b', 'lever', 'LV-44 BRUSH', F.rust, { rpm: 1.25, dmg: 0.9, moveMul: 1.03 });
+tune('amr_d', 'amr', 'AMR-50 DESERT', F.sand, { dmg: 1.1, rpm: 0.85, recoil: 1.15 });
+// machine guns
+tune('lmg_s', 'lmg', 'M60-X SAW', F.forest, { mag: 0.6, reload: 0.75, reloadEmpty: 0.75, moveMul: 1.06 });
+tune('rk74_d', 'rk74', 'RK-74 DRUM', F.wine, { mag: 1.33, reload: 1.15, reloadEmpty: 1.15, moveMul: 0.96 });
+tune('bruiser_ap', 'bruiser', 'BRUISER AP', F.steel, { dmg: 1.17, rpm: 0.85, recoil: 1.15 });
+tune('minigun_t', 'minigun', 'ROTARY-X TURBO', F.hazard, { rpm: 1.2, dmg: 0.88, mag: 1.25 });
+// sidearms
+tune('pistol_m', 'pistol', 'P-19 MATCH', F.steel, { dmg: 1.12, spread: 0.6, rpm: 0.9 });
+tune('revolver_s', 'revolver', 'R-357 SNUB', F.bone, { dmg: 0.85, rpm: 1.3, moveMul: 1.03, spread: 1.3 });
+tune('hc50_l', 'hc50', 'HC-50 LONGSLIDE', F.navy, { dmg: 1.1, rpm: 0.85, spread: 0.7 });
+tune('bx9_d', 'bx9', 'BX-9 DRUM', F.teal, { mag: 1.8, reload: 1.3, reloadEmpty: 1.3, moveMul: 0.97 });
+tune('mp_r', 'mp', 'MP-9 RUSH', F.wine, { rpm: 1.15, dmg: 0.9 });
+
 export const CASE_ORDER = ['ar', 'burst', 'hx17', 'cr56', 'dmr', 'bullpup', 'smg', 'kv', 'zu9', 'kr45', 'pdx', 'mp', 'shotgun', 'autoshotgun', 'rt7', 'double', 'slug', 'sniper', 'amr', 'rg1', 'lever', 'lmg', 'rk74', 'bruiser', 'minigun', 'pistol', 'bx9', 'hc50', 'revolver'];

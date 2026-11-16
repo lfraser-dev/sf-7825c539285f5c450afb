@@ -77,6 +77,7 @@ export class Sounds {
   wallJump() { this.burst(0.12, 500, 0.2); this.burst(0.3, 2400, 0.06, 'highpass'); this.tone(300, 600, 0.12, 0.06, 'triangle'); }
   grab() { this.burst(0.08, 450, 0.3); this.click(1200, 0.2, 2); }
   chain(n) { this.tone(500 + n * 110, 900 + n * 160, 0.1, 0.08, 'triangle'); }
+  coins() { [1568, 2093, 1760, 2349, 2637].forEach((f, i) => setTimeout(() => this.tone(f, f * 1.02, 0.07, 0.07, 'triangle'), i * 45)); }
   checkpoint() { this.tone(880, 880, 0.08, 0.12, 'triangle'); setTimeout(() => this.tone(1320, 1320, 0.14, 0.12, 'triangle'), 80); }
   startRun() { this.tone(660, 1320, 0.18, 0.12, 'square'); }
   finish() { [0, 90, 180, 300].forEach((d, i) => setTimeout(() => this.tone(660 * [1, 1.25, 1.5, 2][i], 660 * [1, 1.25, 1.5, 2][i], 0.18, 0.12, 'triangle'), d)); }

@@ -469,6 +469,7 @@ function fire(w) {
 
 // apply your damage to a target (a range dummy, a bot, or another player online)
 function hitTarget(dummy, dmg, head, point, dir, wname, burn = false) {
+  if (buffOn('overdrive') && wname !== 'BULL CHARGE') dmg *= 1.25;
   const num = { pos: [...point], amount: dmg, head, burn, t: 0, el: null, drift: Math.random() - 0.5 };
   if (dummy.remote) {
     // another player online: tell them; they take the damage on their side
@@ -661,6 +662,7 @@ function killFeed(a, weaponName, b, head) {
 
 function damagePlayer(amount, from, name) {
   if (player.dead || player.invuln > 0 || cutscene) return;
+  if (buffOn('fortify')) amount *= 0.5;
   player.hp -= amount;
   player.hurtT = 0;
   sounds.hurt();
@@ -1053,6 +1055,12 @@ function humanFor(who) {
     skin = { ...CLASSES[cls].skin, build: CLASSES[cls].build, top: team, topStyle: 'zip', zip: true, jacket: null, vest: [0.1, 0.1, 0.12], vestStyle: 'field',
       bottom: [0.1, 0.1, 0.12], legStyle: 'cargo', shoes: [0.08, 0.08, 0.09], shoeStyle: 'boot', gloves: [0.1, 0.1, 0.11], gloveStyle: 'tactical',
       head: 'helmet', headCol: dark(0.9), visor: [0.04, 0.04, 0.05], accent: dark(1.1) };
+    // no two alike: skin tone, face and beard picked from the bot's name
+    let hsh = 7; for (const ch of String(who.name || '')) hsh = (hsh * 31 + ch.charCodeAt(0)) >>> 0;
+    skin.skin = [[0.95, 0.8, 0.68], [0.86, 0.66, 0.54], [0.78, 0.57, 0.42], [0.62, 0.43, 0.3], [0.45, 0.3, 0.2], [0.33, 0.22, 0.15]][hsh % 6];
+    skin.faceShape = ['oval', 'square', 'round', 'slim'][(hsh >> 3) % 4];
+    skin.beard = [null, null, 'stubble', 'full', 'goatee', 'moustache'][(hsh >> 5) % 6];
+    skin.hair = [[0.05, 0.045, 0.045], [0.3, 0.18, 0.09], [0.85, 0.68, 0.32], [0.7, 0.71, 0.74]][(hsh >> 8) % 4];
   }
   return { skin, gunDef: kitGun(cls), gunPartsOf: (def, m) => Weapon.worldParts(def, m) };
 }
@@ -1151,6 +1159,20 @@ const botHooks = {
   },
   // after the death fall: the body breaks apart
   onShatter: (bot) => {
+    if (bot.human) {
+      // people don't break into blocks: the body bursts into a spray of coins and sparks in their team's colour
+      const c = bodyPt(bot), kd = bot.killDir || [0, 1, 0], tc = bot.pal ? [...bot.pal.values()][0] : [1, 0.8, 0.3];
+      for (let i = 0; i < 30; i++) {
+        const a = Math.random() * Math.PI * 2, r = Math.random() * 0.5;
+        effects.spawnPiece([c[0] + Math.cos(a) * r * 0.6, c[1] + Math.random() * 0.3, c[2] + Math.sin(a) * r * 0.6], [0.075, 0.014, 0.075],
+          [Math.cos(a) * (1.5 + Math.random() * 2.5) + kd[0] * 1.2, 2.5 + Math.random() * 3.5 + kd[1] * 0.6, Math.sin(a) * (1.5 + Math.random() * 2.5) + kd[2] * 1.2], [1, 0.78, 0.22], 1.1 + Math.random() * 0.7, 0.35);
+        const d = effects.debris[effects.debris.length - 1]; d.shape = 'cylY'; d.mat = 'brass';
+      }
+      for (let i = 0; i < 16; i++) effects.spawnPiece(c, [0.03, 0.03, 0.08], [(Math.random() - 0.5) * 6, 1 + Math.random() * 5, (Math.random() - 0.5) * 6], tc, 0.4 + Math.random() * 0.4, 1);
+      effects.dust(bot.pos, 4);
+      sounds.coins?.() ?? sounds.checkpoint?.();
+      return;
+    }
     const s = bot.sc, f = bot.fallSign;
     const lay = (c) => bot.toWorld([c[0], 0.25, c[2] + f * c[1] * 0.9]);
     const tc = bot.pal ? [...bot.pal.values()] : null;     // team colours: [body, head, dark]
@@ -1276,7 +1298,7 @@ function updateCombat(dt) {
 const myGadgetOwner = () => (online.active ? online.myId : 'me');
 const ABIL_CD = { barricade: 10, lowwall: 12, pad: 14, launchpad: 14, heal: 20 };
 // which cooldown each ability runs on
-const ABIL_SLOT = { grapple: 'grapple', tether: 'grapple', dash: 'dash', cloak: 'cloak', pad: 'pad', launchpad: 'pad', heal: 'heal', barricade: 'barricade', lowwall: 'barricade', slam: 'slam' };
+const ABIL_SLOT = { blink: 'buff', stim: 'buff', scan: 'buff', overdrive: 'buff', fortify: 'buff', charge: 'buff', grapple: 'grapple', tether: 'grapple', dash: 'dash', cloak: 'cloak', pad: 'pad', launchpad: 'pad', heal: 'heal', barricade: 'barricade', lowwall: 'barricade', slam: 'slam' };
 let cloakT = 0;          // CLOAK: seconds of invisibility left
 const CLOAK_TIME = 6;
 function placeGadget(spec) {
@@ -1297,6 +1319,61 @@ function useGadget(kind) {
   a.max = ABIL_CD[kind];
   a.cd = a.max;
   if (wall) { player.camPitchV -= 0.5; player.shake = Math.max(player.shake || 0, 0.2); }
+}
+// ---- the "buff" abilities: instant effects and short self-boosts that share one cooldown slot
+const BUFF = { blink: { cd: 8 }, stim: { cd: 18, dur: 5 }, scan: { cd: 20, dur: 6 }, overdrive: { cd: 22, dur: 6 }, fortify: { cd: 20, dur: 6 }, charge: { cd: 12, dur: 0.55 } };
+let buffKind = '', buffT = 0, chargeHit = null, chargeDir = null;
+function useBuff(kind) {
+  const a = player.abil.buff, B = BUFF[kind];
+  if (!B || player.dead) return;
+  if (a.cd > 0) { sounds.denied(); return; }
+  a.max = B.cd; a.cd = B.cd;
+  buffKind = kind; buffT = B.dur || 0;
+  if (kind === 'blink') {
+    // the way you're moving (or looking), flat; stop short of anything solid
+    const v = player.vel, sp = Math.hypot(v[0], v[2]), f = player.forward();
+    const dir = sp > 1.5 ? [v[0] / sp, 0, v[2] / sp] : norm([f[0], 0, f[2]]);
+    const from = [player.pos[0], player.pos[1] + 0.9, player.pos[2]];
+    const hit = world.raycast(from, dir, 10.4, false);
+    let d = Math.max(0, (hit ? hit.t : 10.4) - 0.5);
+    // don't land inside something: back off until there's room
+    for (; d > 0.5; d -= 0.5) { const p = [player.pos[0] + dir[0] * d, player.pos[1], player.pos[2] + dir[2] * d]; if (!world.firstOverlap([p[0] - 0.3, p[1] + 0.15, p[2] - 0.3], [p[0] + 0.3, p[1] + 1.7, p[2] + 0.3])) break; }
+    for (let i = 0; i < 14; i++) { const k = i / 14 * d; effects.spawnPiece([from[0] + dir[0] * k, from[1] + (Math.random() - 0.5) * 0.8, from[2] + dir[2] * k], [0.05, 0.05, 0.05], [0, 0.6, 0], [0.5, 0.9, 1], 0.35 + Math.random() * 0.2, 1); effects.debris[effects.debris.length - 1].noGravity = true; }
+    player.pos[0] += dir[0] * d; player.pos[2] += dir[2] * d;
+    player.invuln = Math.max(player.invuln || 0, 0.25);
+    fovKick = 14; sounds.whoosh?.(); sounds.cloak?.();
+  } else if (kind === 'stim') { sounds.checkpoint?.(); banner('STIM', 'FASTER · HEALING', 'good', 0.8); }
+  else if (kind === 'scan') { sounds.lock?.(); banner('RECON PULSE', 'ENEMIES MARKED', 'good', 0.8); }
+  else if (kind === 'overdrive') { sounds.turretHeavy?.(); banner('OVERDRIVE', '+25% DAMAGE', 'good', 0.8); skinHeat = 1; }
+  else if (kind === 'fortify') { sounds.barricade?.(); banner('FORTIFIED', 'HALF DAMAGE', 'good', 0.8); }
+  else if (kind === 'charge') {
+    const f = player.forward();
+    chargeDir = norm([f[0], 0, f[2]]); chargeHit = new Set();
+    sounds.whoosh?.(); player.shake = Math.max(player.shake || 0, 0.25);
+  }
+}
+const buffOn = (k) => buffT > 0 && buffKind === k;
+function updateBuffs(dt) {
+  if (buffT <= 0) return;
+  buffT -= dt;
+  if (player.dead) { buffT = 0; return; }
+  if (buffKind === 'stim') player.hp = Math.min(player.maxHp, player.hp + 20 * dt);
+  if (buffKind === 'overdrive') skinHeat = Math.max(skinHeat, 0.8);
+  if (buffKind === 'charge') {
+    // run them down
+    player.vel[0] = chargeDir[0] * 19; player.vel[2] = chargeDir[2] * 19;
+    fovKick = Math.max(fovKick, 10);
+    for (const t of enemyTargets()) {
+      const p = t.pos || t.ref?.pos;
+      if (!p || chargeHit.has(t.ref) || Math.hypot(p[0] - player.pos[0], p[2] - player.pos[2]) > 1.7 || Math.abs(p[1] - player.pos[1]) > 1.6) continue;
+      chargeHit.add(t.ref);
+      hitTarget(t.ref, 90, false, [p[0], p[1] + 1, p[2]], chargeDir, 'BULL CHARGE');
+      player.shake = Math.max(player.shake || 0, 0.4); sounds.slam?.();
+    }
+    blastWalls([player.pos[0] + chargeDir[0] * 0.9, player.pos[1] + 0.9, player.pos[2] + chargeDir[2] * 0.9], 1.1, 90);
+    if (Math.random() < dt * 30) effects.dust([player.pos[0], player.pos[1] + 0.1, player.pos[2]], 1);
+  }
+  if (buffT <= 0 && (buffKind === 'stim' || buffKind === 'fortify' || buffKind === 'overdrive')) sounds.cloak?.();
 }
 // CLOAK: invisible for a few seconds; enemies can't pick you out unless they're right on top of you
 function useCloak() {
@@ -1331,7 +1408,7 @@ function updateHealing(dt) {
 }
 
 // ---------- throwables (Z) ----------
-const THROW_KIND = { frag: 'frag_t', smoke: 'smoke', flash: 'flash' };
+const THROW_KIND = { frag: 'frag_t', smoke: 'smoke', flash: 'flash', molotov: 'molotov', cluster: 'cluster_t' };
 function useThrowable() {
   if (player.dead || launcherW) return;
   if (throwCharges <= 0) { sounds.denied(); return; }
@@ -1507,8 +1584,8 @@ function updateAbilityHud() {
     set(ab, d.charges > 0 ? 0 : rem, d.charges > 0);
     ab.classList.remove('active');
   } else {
-    const k = ABIL_SLOT[equippedAbility], on = equippedAbility === 'cloak' && cloakT > 0;
-    set(ab, on ? 0 : a[k].cd / a[k].max, a[k].cd <= 0 || on, on ? cloakT.toFixed(1) : a[k].cd > 0 ? a[k].cd.toFixed(1) : '');
+    const k = ABIL_SLOT[equippedAbility], bOn = buffT > 0 && buffKind === equippedAbility && BUFF[buffKind]?.dur > 1, on = (equippedAbility === 'cloak' && cloakT > 0) || bOn;
+    set(ab, on ? 0 : a[k].cd / a[k].max, a[k].cd <= 0 || on, on ? (bOn ? buffT : cloakT).toFixed(1) : a[k].cd > 0 ? a[k].cd.toFixed(1) : '');
     ab.classList.toggle('active', on);
   }
   const pips = equippedAbility === 'barricade' || equippedAbility === 'dash';
@@ -1724,14 +1801,22 @@ function updateHud(dt, fovRad) {
     const sp = project([p[0], p[1] + 0.9, p[2]]);
     if (sp) dms.push([sp, e, d]);
   }
+  // RECON PULSE: every enemy within 45 m is marked through walls while it lasts
+  if (buffOn('scan') && tdm.active && inStadium() && playing && !td) for (const e of tdm.entities()) {
+    if (e === tdm.you || e.team === tdm.myTeam || !e.alive || !e.pos) continue;
+    const d = Math.hypot(e.pos[0] - camEye[0], e.pos[1] + 1 - camEye[1], e.pos[2] - camEye[2]);
+    if (d > 45) continue;
+    const sp = project([e.pos[0], e.pos[1] + 2.0, e.pos[2]]);
+    if (sp) dms.push([sp, e, d, true]);
+  }
   downMarks.forEach((el, i) => { if (i >= dms.length) el.style.display = 'none'; });
-  dms.forEach(([sp, e, d], i) => {
+  dms.forEach(([sp, e, d, scan], i) => {
     let el = downMarks[i];
     if (!el) { el = downMarks[i] = document.createElement('div'); el.className = 'downmark'; hud.dmgLayer.appendChild(el); }
     const foe = e.team !== tdm.myTeam;
     el.style.display = '';
     el.className = `downmark${foe ? ' foe' : ''}`;
-    el.innerHTML = `<b>${foe ? '✕' : '✚'}</b><span>${foe ? (d < 2.6 ? 'E · TAKEDOWN' : 'DOWNED') : 'TEAMMATE DOWN'}</span><small>${Math.round(d)} M</small>`;
+    el.innerHTML = scan ? `<b>◆</b><small>${Math.round(d)} M</small>` : `<b>${foe ? '✕' : '✚'}</b><span>${foe ? (d < 2.6 ? 'E · TAKEDOWN' : 'DOWNED') : 'TEAMMATE DOWN'}</span><small>${Math.round(d)} M</small>`;
     el.style.transform = `translate(${sp[0]}px, ${sp[1]}px) translate(-50%, -100%)`;
   });
 
@@ -1770,7 +1855,7 @@ function enterRange() {
   if (where !== 'range') {
     if (tdm.active) endMatch(false);
     where = 'range';
-    gadgets.clear(); burning.clear(); heavy.clear(); heavyCd = 0; putAwayLauncher(false); playerTether = null; cloakT = 0; playerBurn = null; throwCharges = 2; throwT = 0; flashT = 0;
+    gadgets.clear(); burning.clear(); heavy.clear(); heavyCd = 0; putAwayLauncher(false); playerTether = null; cloakT = 0; buffT = 0; playerBurn = null; throwCharges = 2; throwT = 0; flashT = 0;
     player.spawn(map.spawn.pos, map.spawn.yaw);
     $('mapname').lastChild.textContent = map.name;
     document.body.classList.remove('stadium');
@@ -1791,7 +1876,7 @@ function enterStadium() {
   if (classDirty || !sessionStarted) { applyClass(); sessionStarted = true; }
   if (arriving) {
     where = 'stadium';
-    gadgets.clear(); burning.clear(); heavy.clear(); heavyCd = 0; putAwayLauncher(false); playerTether = null; cloakT = 0; playerBurn = null; throwCharges = 2; throwT = 0; flashT = 0;
+    gadgets.clear(); burning.clear(); heavy.clear(); heavyCd = 0; putAwayLauncher(false); playerTether = null; cloakT = 0; buffT = 0; playerBurn = null; throwCharges = 2; throwT = 0; flashT = 0;
     botMgr.stop();
     course.reset();
     cutscene = null; pressSeq = null;
@@ -2056,7 +2141,7 @@ function startOnline(info) {
   menu.classList.add('hidden');
   enterStadium();
   batches.world = null;
-  gadgets.clear(); burning.clear(); heavy.clear(); heavyCd = 0; putAwayLauncher(false); playerTether = null; cloakT = 0; playerBurn = null; throwCharges = 2; throwT = 0; flashT = 0;
+  gadgets.clear(); burning.clear(); heavy.clear(); heavyCd = 0; putAwayLauncher(false); playerTether = null; cloakT = 0; buffT = 0; playerBurn = null; throwCharges = 2; throwT = 0; flashT = 0;
   resetGlass();
   walls.forEach((w) => w.reset());
   for (const a of ARENAS) a.navObj?.reset();
@@ -2099,7 +2184,7 @@ function startMatch(m) {
   lastMatch = m;
   if (tdm === online || online.inRoom) { online.leave(); tdm = ai; }
   batches.world = null;     // re-batch once the match props are set up
-  gadgets.clear(); burning.clear(); heavy.clear(); heavyCd = 0; putAwayLauncher(false); playerTether = null; cloakT = 0; playerBurn = null; throwCharges = 2; throwT = 0; flashT = 0;
+  gadgets.clear(); burning.clear(); heavy.clear(); heavyCd = 0; putAwayLauncher(false); playerTether = null; cloakT = 0; buffT = 0; playerBurn = null; throwCharges = 2; throwT = 0; flashT = 0;
   resetGlass();
   walls.forEach((w) => w.reset());
   for (const a of ARENAS) a.navObj?.reset();
@@ -2113,7 +2198,7 @@ function startMatch(m) {
 }
 function endMatch(toMenu) {
   if (tdm === online) { online.leave(); tdm = ai; } else tdm.stop();
-  gadgets.clear(); burning.clear(); heavy.clear(); heavyCd = 0; putAwayLauncher(false); playerTether = null; cloakT = 0; playerBurn = null; throwCharges = 2; throwT = 0; flashT = 0;
+  gadgets.clear(); burning.clear(); heavy.clear(); heavyCd = 0; putAwayLauncher(false); playerTether = null; cloakT = 0; buffT = 0; playerBurn = null; throwCharges = 2; throwT = 0; flashT = 0;
   match = null; resultPose = '';
   $('matchend').classList.add('hidden');
   if (toMenu && playing) setPlaying(false);
@@ -2885,6 +2970,7 @@ function frameBody(now) {
     if (abilityHit) {
       if (eq === 'tether') useTether();
       else if (eq === 'cloak') useCloak();
+      else if (BUFF[eq]) useBuff(eq);
       else if (ABIL_CD[eq]) useGadget(eq);
     }
     if (input.hit(settings.heavyKey)) useHeavy();
@@ -2894,7 +2980,7 @@ function frameBody(now) {
     for (const l of lifts) l.update(dt, player, sounds);
     if (inStadium()) for (const c of stadium.cargo || []) c.update(dt, player);
     // heavier guns slow you down; a spinning minigun slows you a lot more
-    player.speedMul = CLASSES[classLo.cls].speed * (w.def.moveMul ?? 1) * (w.def.spin && (w.spinT || 0) > 0.05 ? 0.72 : 1);
+    player.speedMul = CLASSES[classLo.cls].speed * (w.def.moveMul ?? 1) * (w.def.spin && (w.spinT || 0) > 0.05 ? 0.72 : 1) * (buffOn('stim') ? 1.3 : buffOn('fortify') ? 0.8 : 1);
     player.update(dt, input, { ads: w.ads, firing: input.fireDown && w.ammo > 0 && !w.reloading && !player.trav, act });
     if (playerTether) {
       // tied down: you can't get further than the line's length from the spike
@@ -2925,6 +3011,7 @@ function frameBody(now) {
     updateBurns(dt);
     updateNavHoles(dt);
     updateSkinLive(dt);
+    updateBuffs(dt);
     updateHealing(dt);
     if (playerBurn) {
       playerBurn.t -= dt; playerBurn.acc += playerBurn.dps * dt;
@@ -3088,4 +3175,4 @@ function frameBody(now) {
 requestAnimationFrame(frame);
 
 // handy for debugging from the console / automated tests
- window.game = { kf: (...a) => killFeed(...a), daily, gainXp: (n, l) => gainXp(n, l), progress, skinLive: (h, s) => { skinHeat = h; skinStreak = s; }, startTakedown, updateTakedown, findDowned, takedownParts, get td() { return td; }, get deathT() { return deathT; }, useThrowable, get throwCharges() { return throwCharges; }, get flashT() { return flashT; }, heavy, useHeavy, applyClass, useGadget, useTether, useCloak, get cloakT() { return cloakT; }, get launcherW() { return launcherW; }, gadgets, get burning() { return burning; }, lobby, online, get tdm() { return tdm; }, batches, renderer, map, ARENAS, get stadium() { return stadium; }, setArena: (i) => { stadium = ARENAS[i]; }, lifts, hooks: botHooks, updateFall, hookTarget, fallTop: () => fallTop, breakGlass, updateCombat, startMatch: (m) => startMatch(m), enterStadium, where: () => where, sr: () => showroomChar, cosmetics, refreshGuns, classLo, renderMenu, showTab, enterRange, cs: () => cutscene, botMgr, elevator, damagePlayer, pressConsole, setTimeScale: (v) => { timeScale = v; }, bench, openBench, closeBench, loadouts, applyLoadout, course, player, slots, weapon, world, stats, effects, dummies, walls, cases, input, start, setPlaying, resetRange, switchTo, pickUp, WEAPONS };
+ window.game = { kf: (...a) => killFeed(...a), daily, gainXp: (n, l) => gainXp(n, l), progress, skinLive: (h, s) => { skinHeat = h; skinStreak = s; }, startTakedown, updateTakedown, findDowned, takedownParts, get td() { return td; }, get deathT() { return deathT; }, useBuff, get buff() { return { kind: buffKind, t: buffT }; }, setThrow: (k) => { equippedThrow = k; throwCharges = 2; }, useThrowable, get throwCharges() { return throwCharges; }, get flashT() { return flashT; }, heavy, useHeavy, applyClass, useGadget, useTether, useCloak, get cloakT() { return cloakT; }, get launcherW() { return launcherW; }, gadgets, get burning() { return burning; }, lobby, online, get tdm() { return tdm; }, batches, renderer, map, ARENAS, get stadium() { return stadium; }, setArena: (i) => { stadium = ARENAS[i]; }, lifts, hooks: botHooks, updateFall, hookTarget, fallTop: () => fallTop, breakGlass, updateCombat, startMatch: (m) => startMatch(m), enterStadium, where: () => where, sr: () => showroomChar, cosmetics, refreshGuns, classLo, renderMenu, showTab, enterRange, cs: () => cutscene, botMgr, elevator, damagePlayer, pressConsole, setTimeScale: (v) => { timeScale = v; }, bench, openBench, closeBench, loadouts, applyLoadout, course, player, slots, weapon, world, stats, effects, dummies, walls, cases, input, start, setPlaying, resetRange, switchTo, pickUp, WEAPONS };

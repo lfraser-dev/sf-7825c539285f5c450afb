@@ -543,8 +543,13 @@ export class Contestant {
     HB = { U: HB.U, R: HB.R.map((v, i) => v * c1 - HB.B[i] * s1), B: HB.B.map((v, i) => v * c1 + HB.R[i] * s1) };
     HB = pitchBasis(HB, hp + lean * 0.6);
     const H = (v) => at(headC, HB, [v[0] * HEAD_K, v[1] * HEAD_K, v[2] * HEAD_K]);
-    bd.ellipsoid(H([0, -0.004, 0.005]), HB, [0.19, 0.252, 0.215], skin);                  // head: one smooth egg, jaw included
-    bd.ellipsoid(H([0, -0.088, -0.05]), HB, [0.05, 0.034, 0.04], skin);                     // chin
+    // face shape: oval (default), square (a wide jaw), round (full cheeks), slim (narrow, longer chin)
+    const fs = S.faceShape || 'oval';
+    const hw = fs === 'round' ? 0.204 : fs === 'slim' ? 0.176 : fs === 'square' ? 0.194 : 0.19;
+    bd.ellipsoid(H([0, -0.004, 0.005]), HB, [hw, fs === 'slim' ? 0.258 : 0.252, 0.215], skin);                  // head: one smooth egg, jaw included
+    bd.ellipsoid(H([0, fs === 'slim' ? -0.096 : -0.088, -0.05]), HB, [fs === 'square' ? 0.075 : 0.05, 0.034, 0.04], skin);   // chin
+    if (fs === 'square') bd.rbox(H([0, -0.066, -0.012]), HB, [0.158, 0.07, 0.15], 0.03, skin);                 // a broad jaw
+    if (fs === 'round') for (const sx of [-1, 1]) bd.ellipsoid(H([sx * 0.052, -0.04, -0.05]), HB, [0.075, 0.07, 0.07], skin);   // cheeks
     const masked = S.head === 'mask' || S.head === 'facemask', visored = S.head === 'helmet';
     if (!masked) for (const sx of [-1, 1]) bd.ellipsoid(H([sx * 0.096, 0.0, 0.012]), HB, [0.03, 0.055, 0.04], shade(skin, 0.93));   // ears
     if (!masked) {
@@ -555,6 +560,17 @@ export class Contestant {
       }
       bd.ellipsoid(H([0, -0.01, -0.104]), HB, [0.022, 0.04, 0.028], shade(skin, 0.97));                         // nose
       bd.rbox(H([0, -0.058, -0.094]), HB, [0.05, 0.008 + 0.025 * talk, 0.01], 0.004, shade(skin, 0.6));         // mouth
+      // facial hair
+      const bc = S.beardCol || S.hair || [0.1, 0.07, 0.05], br = S.beard;
+      if (br === 'stubble') bd.ellipsoid(H([0, -0.052, -0.012]), HB, [hw + 0.004, 0.13, 0.19], skin.map((v, k) => v * 0.72 + bc[k] * 0.28));
+      if (br === 'full' || br === 'long') {
+        bd.ellipsoid(H([0, -0.062, -0.014]), HB, [hw + 0.012, 0.14, 0.2], bc);
+        bd.ellipsoid(H([0, -0.1, -0.055]), HB, [0.09, br === 'long' ? 0.13 : 0.07, 0.075], bc);
+        bd.rbox(H([0, -0.058, -0.103]), HB, [0.04, 0.006 + 0.02 * talk, 0.008], 0.003, shade(skin, 0.55));       // the mouth shows through
+      }
+      if (br === 'goatee') { bd.ellipsoid(H([0, -0.092, -0.07]), HB, [0.06, 0.055, 0.05], bc); bd.rbox(H([0, -0.04, -0.1]), HB, [0.062, 0.012, 0.012], 0.005, bc); }
+      if (br === 'moustache' || br === 'full' || br === 'long') bd.rbox(H([0, -0.04, -0.101]), HB, [0.07, 0.016, 0.014], 0.006, bc);
+      if (br === 'handlebar') for (const sx of [-1, 1]) { bd.capsule(H([0, -0.04, -0.102]), H([sx * 0.045, -0.046, -0.094]), 0.009, 0.007, bc); bd.capsule(H([sx * 0.045, -0.046, -0.094]), H([sx * 0.06, -0.028, -0.088]), 0.007, 0.003, bc); }
     }
     const hair = S.hair || [0.1, 0.07, 0.05];
     if (S.head === 'cap') {
@@ -595,8 +611,40 @@ export class Contestant {
       bd.rbox(H([0, -0.065, -0.1]), HB, [0.05, 0.006, 0.01], 0.003, shade(S.headCol, 0.6));
       if (S.maskStripe) bd.rbox(H([0, 0.02, -0.112]), HB, [0.012, 0.2, 0.01], 0.004, S.maskStripe, 0.3);
     } else if (S.head === 'hair') {
-      bd.ellipsoid(H([0, 0.035, 0.022]), HB, [0.2, 0.205, 0.215], hair);
-      bd.ellipsoid(H([0.02, 0.085, -0.05]), HB, [0.15, 0.06, 0.09], hair);                                       // quiff
+      // hairstyles (no hat). Most start from a cap of hair over the skull.
+      const hs = S.hairStyle || 'quiff', hg = S.hairGlow || 0;
+      const cap = (k = 1) => bd.ellipsoid(H([0, 0.035, 0.022]), HB, [0.2 * k, 0.205 * k, 0.215 * k], hair, hg);
+      if (hs === 'bald') { /* nothing */ }
+      else if (hs === 'buzz') bd.ellipsoid(H([0, 0.03, 0.02]), HB, [0.194, 0.2, 0.213], skin.map((v, k) => v * 0.45 + hair[k] * 0.55));
+      else if (hs === 'quiff') { cap(); bd.ellipsoid(H([0.02, 0.085, -0.05]), HB, [0.15, 0.06, 0.09], hair, hg); }
+      else if (hs === 'flat') { cap(0.99); bd.rbox(H([0, 0.105, 0.005]), HB, [0.17, 0.07, 0.19], 0.025, hair, hg); }
+      else if (hs === 'afro') {
+        bd.ellipsoid(H([0, 0.075, 0.03]), HB, [0.3, 0.28, 0.3], hair, hg);
+        for (const [x, y, z] of [[-0.1, 0.1, -0.03], [0.1, 0.1, -0.03], [0, 0.17, 0.0], [-0.11, 0.03, 0.06], [0.11, 0.03, 0.06], [0, 0.06, 0.13]]) bd.ellipsoid(H([x, y, z]), HB, [0.14, 0.14, 0.14], hair, hg);
+      } else if (hs === 'mohawk') {
+        bd.ellipsoid(H([0, 0.03, 0.02]), HB, [0.194, 0.2, 0.213], skin.map((v, k) => v * 0.5 + hair[k] * 0.5));  // shaved sides
+        for (let k = 0; k < 7; k++) { const a = -0.9 + k * 0.42; bd.capsule(H([0, 0.1 * Math.cos(a) + 0.02, 0.02 + 0.105 * Math.sin(a)]), H([0, 0.19 * Math.cos(a) + 0.02, 0.02 + 0.17 * Math.sin(a)]), 0.03, 0.008, hair, hg); }
+      } else if (hs === 'long') {
+        cap(1.02);
+        for (const sx of [-1, 1]) bd.capsule(H([sx * 0.085, 0.02, 0.03]), H([sx * 0.1, -0.2, 0.05]), 0.045, 0.03, hair, hg);
+        bd.capsule(H([0, 0.02, 0.085]), H([0, -0.22, 0.09]), 0.07, 0.05, hair, hg);
+      } else if (hs === 'ponytail') {
+        cap();
+        bd.ellipsoid(H([0, 0.06, 0.12]), HB, [0.06, 0.06, 0.06], S.accent || hair);
+        bd.capsule(H([0, 0.055, 0.14]), H([0, -0.14, 0.17]), 0.04, 0.014, hair, hg);
+      } else if (hs === 'bun') {
+        cap();
+        bd.ellipsoid(H([0, 0.15, 0.05]), HB, [0.1, 0.09, 0.1], hair, hg);
+      } else if (hs === 'curtains') {
+        cap(1.01);
+        for (const sx of [-1, 1]) bd.capsule(H([sx * 0.02, 0.1, -0.07]), H([sx * 0.095, 0.01, -0.075]), 0.032, 0.016, hair, hg);
+      } else if (hs === 'dreads') {
+        cap();
+        for (let k = 0; k < 9; k++) { const a = Math.PI * (0.15 + k * 0.0875 * 2); const x = Math.cos(a) * 0.095, z = 0.03 + Math.sin(a) * 0.1; bd.capsule(H([x, 0.04, z]), H([x * 1.25, -0.16 - (k % 3) * 0.02, z * 1.15 + 0.01]), 0.02, 0.014, hair, hg); }
+      } else if (hs === 'spikes') {
+        cap();
+        for (const [x, y, z, dx, dz] of [[0, 0.12, -0.05, 0.1, -0.1], [-0.05, 0.11, -0.02, -0.08, -0.04], [0.05, 0.11, -0.02, 0.1, -0.03], [0, 0.125, 0.02, 0, 0.06], [-0.06, 0.09, 0.05, -0.1, 0.07], [0.06, 0.09, 0.05, 0.1, 0.07]]) bd.capsule(H([x, y - 0.03, z]), H([x + dx * 0.4, y + 0.06, z + dz * 0.4]), 0.032, 0.006, hair, hg);
+      } else cap();
     } else if (S.head === 'helmet') {
       withMat(S.headMat || 'paint', () => bd.ellipsoid(H([0, 0.03, 0.008]), HB, [0.235, 0.235, 0.25], S.headCol));
       bd.ellipsoid(H([0, 0.012, -0.022]), HB, [0.226, 0.085, 0.236], S.visor, 0.6);                              // wraparound visor

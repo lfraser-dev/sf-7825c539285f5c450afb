@@ -5,6 +5,7 @@ import { Contestant } from './contestant.js';
 import { takedownPose } from './takedown.js';
 
 const ZERO = [0, 0, 0];
+const sm = (x) => (x <= 0 ? 0 : x >= 1 ? 1 : x * x * (3 - 2 * x));
 const leanV = (v, a) => (a ? [v[0], v[1] * Math.cos(a) + v[2] * Math.sin(a), -v[1] * Math.sin(a) + v[2] * Math.cos(a)] : v);
 
 // the live pose, in character space (feet at the origin, facing -z)
@@ -27,26 +28,40 @@ function livePose(bot, dyingT, td) {
     return p;
   }
   if (dying) {
-    // limp: arms loose, head rolled
-    p.pelvis = [0, pelvisY, 0]; p.lean = 0.12; p.twist = 0.1; p.head = [0.3, 0.25];
-    p.feet = [[-0.15, 0.05, 0.03], [0.17, 0.05, -0.06]];
-    p.hands = [[-0.34, 0.95, -0.12], [0.36, 1.02, 0.1]];
-    p.elbowOut = 1.3;
+    // going down: the knees buckle and the arms fling out, then the body settles into one of three sprawls
+    const fs = bot.fallSign || 1, v = bot.deathVar ?? 0, t = dyingT;
+    const mixv = (a, b2, k) => a.map((x, i) => x + (b2[i] - x) * k);
+    const buckle = Math.min(1, t / 0.22), settle = sm((t - 0.3) / 0.45);
+    const fling = { hands: [[-0.5, 1.5, 0.1 * fs], [0.52, 1.42, 0.14 * fs]], feet: [[-0.17, 0.05, 0.05], [0.18, 0.05, -0.08]] };
+    const FINAL = [
+      { hands: [[-0.55, 1.28, 0.0], [0.5, 1.52, 0.04]], feet: [[-0.24, 0.05, 0.04], [0.2, 0.05, 0.0]], knee: 0.3, head: [0.55, 0.15] },          // spread-eagled
+      { hands: [[-0.12, 1.18, -0.2 * fs], [0.42, 0.95, 0.02]], feet: [[-0.14, 0.05, 0.0], [0.22, 0.34, -0.3 * fs]], knee: 0, head: [-0.5, 0.2] },   // an arm across the chest, one knee up
+      { hands: [[-0.26, 1.9, 0.02], [0.44, 1.05, 0.06]], feet: [[-0.1, 0.05, 0.02], [0.1, 0.05, -0.02]], knee: 0.1, head: [0.35, -0.1] },         // one arm thrown above the head
+    ][v % 3];
+    p.pelvis = [0, 0.95 - 0.34 * buckle * (1 - settle) - FINAL.knee * 0.12 * settle, 0];
+    p.lean = (0.22 * fs) * buckle * (1 - settle); p.twist = (v === 1 ? -0.25 : 0.2) * buckle;
+    p.head = mixv([0.2, -0.3 * fs], FINAL.head, settle);
+    p.hands = [mixv(fling.hands[0], FINAL.hands[0], settle), mixv(fling.hands[1], FINAL.hands[1], settle)];
+    p.feet = [mixv(fling.feet[0], FINAL.feet[0], settle), mixv(fling.feet[1], FINAL.feet[1], settle)];
+    p.elbowOut = 1.4; p.mouth = 0.4 * (1 - settle);
     return p;
   }
   const flinch = bot.flinch || 0, recoil = bot.recoil || 0, pitch = bot.aimPitch || 0;
   const rush = bot.type === 'rusher' ? 0.1 : 0;
-  p.pelvis = [0, pelvisY, 0];
-  p.lean = (0.1 + rush) * g - flinch * 0.3 + (bot.landK || 0) * 0.18 - pitch * 0.25;
-  p.twist = 0.3 + Math.sin(w) * 0.08 * g + flinch * (bot.flinchTwist || 0);      // bladed: gun shoulder back
-  p.head = [-0.28, -pitch * 0.55];
+  // hit: stagger back, the shoulder that took it whips round, the head snaps and the gun dips
+  const ft = bot.flinchTwist || 0;
+  p.pelvis = [ft * flinch * 0.05, pelvisY - flinch * 0.07, flinch * 0.09];
+  p.lean = (0.1 + rush) * g - flinch * 0.42 + (bot.landK || 0) * 0.18 - pitch * 0.25;
+  p.twist = 0.3 + Math.sin(w) * 0.08 * g + flinch * ft * 1.6;      // bladed: gun shoulder back
+  p.head = [-0.28 + flinch * ft * 0.5, -pitch * 0.55 - flinch * 0.35];
+  p.mouth = flinch * 0.6;
   // legs: a proper stride in the direction of travel
   p.feet = [-1, 1].map((side) => {
     const ph = w + (side > 0 ? Math.PI : 0), s = Math.sin(ph), c = Math.cos(ph);
     return [side * 0.13 + md[0] * s * 0.34 * g, 0.05 + Math.max(0, c) * 0.16 * g, md[1] * s * 0.34 * g + (side > 0 ? -0.05 : 0.06) * (1 - g)];
   });
   // the gun: shouldered, pointing where they aim; the hands go to its grips
-  p.gun = { c: [0.13, 1.43 - crouch - bob * 0.5 + recoil * 0.012, -0.2 + recoil * 0.05], rx: pitch + recoil * 0.05, ry: 0 };
+  p.gun = { c: [0.13, 1.43 - crouch - bob * 0.5 + recoil * 0.012 - flinch * 0.1, -0.2 + recoil * 0.05 + flinch * 0.06], rx: pitch + recoil * 0.05 - flinch * 0.4, ry: flinch * ft * 0.5 };
   p.holdGun = true;
   p.hands = [[-0.08, 1.36 - crouch, -0.5], [0.16, 1.34 - crouch, -0.14]];
   p.armHint = [[-0.7, -0.75, 0.25], [0.75, -0.65, 0.5]];
@@ -64,8 +79,13 @@ export function humanParts(bot, dyingT) {
   const td = bot.pose || (bot.tdAnim && bot.alive ? takedownPose(bot.tdAnim.kind, bot.tdAnim.t) : null);
   // the whole-body transform: falling over when downed, flips and slams, lunges, the drop-in
   const strain = !bot.alive && bot.downed && bot.struggle ? bot.struggle * 0.34 : 0;
-  const fa = dyingT >= 0 ? Math.min(1, dyingT / 0.6) ** 2 * 1.5 - strain : 0;
-  if (fa) fig.root = { rot: -fa * (bot.fallSign || 1), pivot: 0, off: [0, 0.1 * Math.min(1, fa), 0] };
+  if (dyingT >= 0 && bot.deathVar == null) bot.deathVar = Math.floor(Math.random() * 3);
+  if (dyingT < 0) bot.deathVar = null;
+  // buckle first, then topple, with a small bounce as the body lands
+  const tf = Math.max(0, dyingT - 0.16), k = Math.min(1, tf / 0.5);
+  const bounce = tf > 0.5 && tf < 0.8 ? Math.sin((tf - 0.5) / 0.3 * Math.PI) * 0.07 : 0;
+  const fa = dyingT >= 0 ? k * k * (3 - 2 * k) * 1.52 - bounce - strain : 0;
+  if (dyingT >= 0) fig.root = { rot: -fa * (bot.fallSign || 1), pivot: 0, off: [0, 0.11 * Math.min(1, fa), 0] };
   else if (td) fig.root = { rot: td.spin ? td.rot : 0, pivot: 0.95, off: td.off };
   else if (bot.dropY) fig.root = { rot: 0, pivot: 0, off: [0, bot.dropY, 0] };
   else fig.root = null;

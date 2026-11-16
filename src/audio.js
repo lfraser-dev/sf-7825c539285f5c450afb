@@ -117,6 +117,28 @@ export class Sounds {
   glass() { this.burst(0.22, 5200, 0.2, 'highpass'); this.burst(0.45, 3000, 0.1, 'bandpass', 3); for (let i = 0; i < 5; i++) setTimeout(() => this.click(3800 + Math.random() * 3200, 0.1, 7), 25 + i * 40 + Math.random() * 30); }
   spin() { this.burst(0.2, 1700, 0.13, 'bandpass', 1.4); this.burst(0.12, 3600, 0.04, 'highpass'); }
   catch() { this.burst(0.06, 500, 0.28); this.click(2400, 0.22, 3); }
+  // the railgun: a whine that climbs for as long as the charge takes (stopped if you let go), then a crack of thunder
+  railCharge(dur = 1) {
+    const c = this.ctx; if (!c) return;
+    this.railStop();
+    const t = c.currentTime, g = c.createGain(), o = c.createOscillator(), o2 = c.createOscillator();
+    o.type = 'sawtooth'; o2.type = 'sine';
+    o.frequency.setValueAtTime(90, t); o.frequency.exponentialRampToValueAtTime(1500, t + dur);
+    o2.frequency.setValueAtTime(400, t); o2.frequency.exponentialRampToValueAtTime(5200, t + dur);
+    g.gain.setValueAtTime(0.001, t); g.gain.exponentialRampToValueAtTime(0.14, t + dur);
+    o.connect(g); o2.connect(g); g.connect(this.master);
+    o.start(t); o2.start(t); o.stop(t + dur + 0.6); o2.stop(t + dur + 0.6);
+    this.rail = { g, o, o2 };
+  }
+  railStop(fired) {
+    const c = this.ctx, r = this.rail; if (!c || !r) return;
+    this.rail = null;
+    try { r.g.gain.cancelScheduledValues(c.currentTime); r.g.gain.setTargetAtTime(0.0001, c.currentTime, fired ? 0.01 : 0.06); r.o.stop(c.currentTime + 0.4); r.o2.stop(c.currentTime + 0.4); } catch { /* already stopped */ }
+  }
+  railShot() {
+    this.railStop(true);
+    this.tone(2400, 60, 0.5, 0.3, 'sawtooth'); this.tone(120, 28, 0.9, 0.5); this.burst(0.9, 300, 0.8); this.burst(0.3, 5000, 0.3, 'highpass');
+  }
   whoosh() { this.burst(0.9, 900, 0.12, 'bandpass', 0.6); }
   elevatorStart() { this.click(900, 0.3, 2); this.burst(0.4, 400, 0.12); }      // gate latch + motor clunk
   elevatorDing() { this.burst(0.25, 300, 0.25); this.click(1400, 0.25, 3); }   // car settles

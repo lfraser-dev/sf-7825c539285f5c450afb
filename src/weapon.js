@@ -5,7 +5,7 @@ import { compose, mul, mat4, damp, clamp, lerp, anglesFor, spring } from './math
 const GLOVE = [0.3, 0.29, 0.27];
 const SLEEVE = [0.22, 0.24, 0.25];
 // what your hands and sleeves look like in first person (set from your class outfit)
-const HAND_LOOK = { glove: GLOVE, gloveDark: [0.14, 0.14, 0.15], sleeve: SLEEVE, sleeveDark: [0.15, 0.16, 0.17], accent: [0.92, 0.1, 0.08], nail: [0.85, 0.7, 0.66], bare: false, tactical: true };
+const HAND_LOOK = { glove: GLOVE, gloveDark: [0.14, 0.14, 0.15], sleeve: SLEEVE, sleeveDark: [0.15, 0.16, 0.17], accent: [0.92, 0.1, 0.08], nail: [0.85, 0.7, 0.66], tendon: GLOVE, bare: false, tactical: true };
 export function setHandLook(o) {
   const dk = (c, k) => c.map((v) => v * k);
   const skin = o.skin || [0.8, 0.62, 0.5];
@@ -17,6 +17,7 @@ export function setHandLook(o) {
     sleeve: o.top || SLEEVE, sleeveDark: dk(o.top || SLEEVE, 0.72),
     accent: o.accent || o.logo || [0.92, 0.1, 0.08],
     nail: skin.map((v) => Math.min(1, v * 1.1 + 0.08)),
+    tendon: skin.map((v) => Math.min(1, v * 1.04 + 0.015)),
   });
 }
 const FLASH = [1, 0.93, 0.75];
@@ -125,6 +126,7 @@ export class Weapon {
   get scoped() { return !!this.def.scope && this.adsT > 0.8; }
 
   equip() {
+    this.chargeT = 0;
     this.equipT = 0;
     this.reload = null;
     this.cycleT = null;
@@ -181,6 +183,16 @@ export class Weapon {
       trigger = this.burstLeft > 0 || (trigger && this.ammo <= 0);
     }
 
+    // charge guns (the railgun): hold the trigger and the capacitors wind up; the moment they're full it fires.
+    // Let go early and the charge bleeds away.
+    if (d.charge) {
+      const can = input.fireDown && !this.reload && this.equipT >= 0.5 && this.cycleT === null && !tr && this.ammo > 0 && this.cool <= 0;
+      const prev = this.chargeT || 0;
+      this.chargeT = can ? Math.min(1, prev + dt / d.charge) : Math.max(0, prev - dt * 2.5);
+      if (can && prev === 0) ctx.sounds?.railCharge?.(d.charge);
+      if (!can && prev > 0.05 && this.ammo > 0) ctx.sounds?.railStop?.();
+      trigger = this.chargeT >= 1 || (input.fireHit && this.ammo <= 0);
+    }
     if (trigger && this.reload?.shell && this.ammo > 0) this.reload.interrupt = true;
     // the show-off end of a draw never gets in the way: shoot or aim and it snaps straight to ready
     if (this.equipT >= 0.5 && this.equipT < 1 && (trigger || input.aiming)) this.equipT = 1;
@@ -232,6 +244,7 @@ export class Weapon {
     if (d.burst) { this.burstLeft--; if (this.burstLeft <= 0) this.cool += d.burstGap; }
     this.ammo--;
     this.sinceShot = 0;
+    this.chargeT = 0;
     ctx.fire(this);
     const am = lerp(1, 0.55, this.adsT);
     // shooting mid-slide: no stable stance, so two-handed guns kick a lot harder
@@ -368,6 +381,7 @@ export class Weapon {
     const fl = [0, 0, 0, 0, 0, 0];
     let magSpin = 0, shellSpin = 0;
     let shine = -1;                                 // 0..1 = a highlight sweeping from the stock to the muzzle
+    const ch = d.charge ? this.chargeT || 0 : 0;     // railgun charge, 0..1
     const heavy = (d.style || d.id) === 'lmg', pistol = !!d.slide || (d.style || d.id) === 'pistol';
 
     const r = this.reload;
@@ -758,6 +772,12 @@ export class Weapon {
         + dt_ * 0.35 + gt * 0.25,
     ];
     rot[0] += fl[3]; rot[1] += fl[4]; rot[2] += fl[5];
+    if (ch > 0) {
+      // charging: the gun shudders harder and harder and gets pulled in tight
+      const j = ch * ch * 0.0035;
+      pos[0] += (Math.random() - 0.5) * j; pos[1] += (Math.random() - 0.5) * j; pos[2] += ch * 0.025;
+      rot[2] += (Math.random() - 0.5) * ch * ch * 0.02; rot[0] -= ch * 0.015;
+    }
     compose(this.root, pos, rot, [1, 1, 1]);
 
     const out = [];
@@ -791,6 +811,16 @@ export class Weapon {
         mul(p.local, this.magFrame, this.tmp);
       } else compose(p.local, c, [rxs, ry, rzs], p.s);
       mul(p.model, this.root, p.local);
+      if (ch > 0 && p.name === 'coilGlow') {
+        // the coils light one after another from the breech to the muzzle, then all burn white
+        const zi = clamp((-p.c[2] - 0.26) / 0.4, 0, 1), on = clamp(ch * 1.5 - zi * 0.5, 0, 1), fl = 0.75 + 0.25 * Math.sin(time * 60 + zi * 9);
+        const s2 = [p.s[0] * (1 + on * 0.06), p.s[1] * (1 + on * 0.06), p.s[2] * (1 + on * 1.4)];
+        compose(this.tmp, c, [rxs, ry, rzs], s2);
+        const m2 = p.chM || (p.chM = mat4());
+        mul(m2, this.root, this.tmp);
+        out.push({ model: m2, scale: s2, color: [0.15 + on * 0.45 * ch, 0.8 + 0.15 * on, 1], emissive: Math.min(1, (0.5 + on) * fl), shape: p.shape, edges: 0 });
+        continue;
+      }
       if (shine >= 0) {
         const zS = this.zBack + (this.zFront - this.zBack) * shine;
         const k = Math.exp(-(((p.c[2] - zS) / 0.06) ** 2)) * Math.sin(Math.PI * shine);
@@ -838,7 +868,7 @@ export class Weapon {
       mul(m, F, this.tmp);
       out.push({ model: m, scale: sc, color: col, emissive: 0, shape, mat, edges: 0 });
     };
-    const G = L.glove, Gd = L.gloveDark, bare = L.bare;
+    const G = L.glove, Gd = L.gloveDark, bare = L.bare, HM = bare ? 'skin' : 'cloth';     // bare hands shade as skin
     const nail = (F, c, r) => { if (bare) put(F, c, r, [0.012, 0.004, 0.01], L.nail, 0.002); };
     const knuckle = (F, c, r) => { if (L.tactical) put(F, c, r, [0.007, 0.014, 0.017], Gd, 0.003, 'rubber'); };
 
@@ -863,8 +893,20 @@ export class Weapon {
       mul(H, F, B);
       // palm, the pads at its base, and the knuckle line
       // palm: one soft rounded block, a little narrower at the wrist (no separate pads sticking out of the sides)
-      put(H, [0, 0, 0.008], [0, 0, 0], [0.074, 0.028, 0.08], G, 0.0135, 'cloth');
-      put(H, [side * 0.006, -0.002, -0.026], [0, 0, 0], [0.058, 0.026, 0.03], G, 0.0125, 'cloth');
+      put(H, [0, 0, 0.008], [0, 0, 0], [0.074, 0.028, 0.08], G, 0.0135, HM);
+      put(H, [side * 0.006, -0.002, -0.026], [0, 0, 0], [0.058, 0.026, 0.03], G, 0.0125, HM);
+      // the heel of the thumb, a row of knuckles, and the tendons fanning back from them
+      put(H, [side * 0.02, -0.01, -0.012], [0, 0, side * 0.3], [0.034, 0.022, 0.05], G, 0.0105, HM);
+      FING.forEach(([kx, kz, , r]) => {
+        put(H, [side * kx, 0.0115, kz - 0.004], [0, 0, 0], [r * 1.9, 0.011, 0.02], G, 0.0052, HM);
+        if (bare) put(H, [side * kx * 0.72, 0.0128, kz - 0.036], [0, side * kx * 4.5, 0], [0.006, 0.006, 0.05], L.tendon, 0.0028, HM);
+      });
+      if (!bare) {
+        // gloves: a stitched panel on the back, a cuff strap with a tab
+        put(H, [0, 0.0145, 0.004], [0, 0, 0], [0.05, 0.004, 0.04], Gd, 0.0018, 'rubber');
+        put(H, [0, 0.0, -0.046], [0, 0, 0], [0.066, 0.034, 0.016], Gd, 0.007, 'rubber');
+        put(H, [side * -0.012, 0.0178, -0.046], [0, 0, 0], [0.022, 0.004, 0.018], L.accent, 0.0015, 'rubber');
+      }
       if (L.tactical) put(H, [0, 0.016, 0.036], [0, 0, 0], [0.072, 0.009, 0.022], Gd, 0.004, 'rubber');
       // fingers
       FING.forEach(([kx, kz, lens, r], i) => {
@@ -876,7 +918,8 @@ export class Weapon {
           const sp = side * (spread || 0);
           const dir = [Math.sin(sp) * Math.cos(cum), -Math.sin(cum), Math.cos(sp) * Math.cos(cum)];
           const q = p.map((v, k) => v + dir[k] * lens[j]);
-          capsule(H, p, q, rad[j], rad[j + 1], G);
+          capsule(H, p, q, rad[j], rad[j + 1], G, HM);
+          if (!bare && j === 2) capsule(H, p.map((v, k) => v + dir[k] * lens[j] * 0.35), q, rad[j + 1] * 1.06, rad[j + 1] * 1.03, Gd, 'rubber');   // grippy fingertips
           if (j === 2 && bare) {   // nail on the back of the fingertip
             const up = [Math.sin(sp) * Math.sin(cum) * 0, Math.cos(cum), Math.sin(cum)];
             const nc = q.map((v, k) => v - dir[k] * lens[j] * 0.45 + up[k] * rad[3] * 0.85);
@@ -891,7 +934,7 @@ export class Weapon {
         const d = [side * d0[0], d0[1], d0[2]], l = Math.hypot(...d), dir = d.map((v) => v / l);
         const len = [0.03, 0.027, 0.022][j], r = [0.0125, 0.011, 0.0098, 0.009];
         const q = p.map((v, k) => v + dir[k] * len);
-        capsule(H, p, q, r[j], r[j + 1], G);
+        capsule(H, p, q, r[j], r[j + 1], G, HM);
         p = q;
       });
       return H;
@@ -971,11 +1014,35 @@ export class Weapon {
       const len = Math.max(0.05, l0 - 0.034);
       const ang = anglesFor(u);
       // one smooth forearm: the glove's wrist runs into the sleeve, which tapers out to the elbow
-      put(I, hand.map((v, k) => v + u[k] * 0.02), ang, [0.052, 0.052, 0.07], L.glove, { cap: [0.026, 0.024] }, 'cloth');
+      put(I, hand.map((v, k) => v + u[k] * 0.02), ang, [0.052, 0.052, 0.07], L.glove, { cap: [0.026, 0.024] }, HM);
+      // a ribbed cuff where the sleeve ends, with a stripe of your colour; a watch on the left wrist
+      put(I, hand.map((v, k) => v + u[k] * 0.062), ang, [0.068, 0.068, 0.03], L.sleeveDark, { cap: [0.034, 0.033] }, 'cloth');
+      put(I, hand.map((v, k) => v + u[k] * 0.078), ang, [0.0705, 0.0705, 0.006], L.accent, 'cyl', 'cloth');
+      if (isLeft && bare) {
+        put(I, hand.map((v, k) => v + u[k] * 0.036), ang, [0.058, 0.058, 0.014], [0.06, 0.06, 0.065], 'cyl', 'rubber');
+        put(I, hand.map((v, k) => v + u[k] * 0.036 + (k === 1 ? 0.027 : 0)), ang, [0.03, 0.01, 0.03], [0.1, 0.1, 0.11], 0.004, 'steel');
+        put(I, hand.map((v, k) => v + u[k] * 0.036 + (k === 1 ? 0.0325 : 0)), ang, [0.022, 0.002, 0.022], [0.1, 0.9, 0.6], 0.001);
+      }
       const rw = 0.03, re = isLeft && plant ? lerp(0.042, 0.036, plant.t) : 0.042;
       put(I, h.map((v, k) => v + u[k] * len / 2), ang, [re * 2, re * 2, len], L.sleeve, { cap: [re, rw] }, 'cloth');
     });
 
+    if (ch > 0.02) {
+      // a ball of plasma building at the muzzle, a halo round it, and arcs snapping between the rails
+      const cp = this.chPool || (this.chPool = Array.from({ length: 12 }, () => mat4()));
+      const mz = add3(d.muzzle, [0, 0, -0.03]), pulse = 1 + 0.18 * Math.sin(time * 45);
+      const orb = (i, r, col, a) => { const s = [r, r, r]; compose(this.tmp, mz, [time * 7, time * 5, 0], s); mul(cp[i], this.root, this.tmp); out.push({ model: cp[i], scale: s, color: col, emissive: 1, shape: 'sphere', alpha: a, edges: 0 }); };
+      orb(0, (0.012 + 0.05 * ch * ch) * pulse, [0.85, 1, 1], 1);
+      orb(1, (0.03 + 0.12 * ch * ch) * pulse, [0.2, 0.75, 1], 0.28 * ch);
+      orb(2, (0.05 + 0.24 * ch * ch * ch), [0.3, 0.5, 1], 0.1 * ch);
+      const arcs = Math.floor(ch * 6 + 0.5);
+      for (let i = 0; i < arcs; i++) {
+        const z = -0.26 - Math.random() * 0.5, len = 0.03 + Math.random() * 0.07, s = [0.004, 0.004, len];
+        compose(this.tmp, [(Math.random() - 0.5) * 0.09, 0.012 + (Math.random() - 0.5) * 0.09, z], [Math.random() * 6, Math.random() * 6, 0], s);
+        mul(cp[3 + i], this.root, this.tmp);
+        out.push({ model: cp[3 + i], scale: s, color: [0.75, 0.95, 1], emissive: 1, edges: 0 });
+      }
+    }
     const fs = d.flashScale ?? 1;
     if (this.flash > 0 && fs > 0) {
       const f = hm[4], s = [0.09 * fs, 0.09 * fs, 0.12 * fs];

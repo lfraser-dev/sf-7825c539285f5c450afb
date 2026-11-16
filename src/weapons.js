@@ -1171,10 +1171,11 @@ bespoke('pdx', 'smg', {
 
 // RG-1: a railgun. Twin copper rails either side of the bore with cyan coils that glow, a battery pack for a stock.
 bespoke('rg1', 'sniper', {
-  name: 'RG-1', type: 'RAILGUN', rpm: 70, mag: 5, dmg: 100, headMult: 2.2, reloadAnim: 'tap', action: null,
-  reload: 2.4, reloadEmpty: 2.4,
-  spread: { base: 0.035, move: 0.035, air: 0.05, bloom: 0, bloomMax: 0, ads: 0 },
-  recoil: { up: 0.04, side: 0.006, vm: 2.2 },
+  name: 'RG-1', type: 'RAILGUN', rpm: 70, mag: 1, dmg: 1000, headMult: 1, reloadAnim: 'tap', action: null, auto: true,
+  charge: 1.0,                 // hold the trigger for a second: it fires itself when full, and whoever it hits is gone
+  reload: 1.7, reloadEmpty: 1.7,
+  spread: { base: 0.004, move: 0.012, air: 0.03, bloom: 0, bloomMax: 0, ads: 0 },     // a charged shot goes where you point it
+  recoil: { up: 0.09, side: 0.01, vm: 4.5 },
   sightY: 0.09, adsZ: -0.24, hip: [0.17, -0.19, -0.6], muzzle: [0, 0.015, -0.78],
   grip: [0, -0.08, 0.14], foreGrip: [0, -0.05, -0.3], eject: [0.045, 0.03, 0.06], magPos: [0, -0.08, 0.02], bolt: [0.04, 0.03, 0.08],
   sound: { freq: 900, thump: 60, gain: 0.9, dur: 0.5 },
@@ -1377,7 +1378,7 @@ const BALANCE = {
   // build 0.52
   kr45: { dmg: 15, rpm: 1200, moveMul: 1.08 },              // 17 hits, ~0.8 s, tiny recoil
   pdx: { dmg: 16, rpm: 950, mag: 50, moveMul: 1.07 },       // a huge mag for an SMG
-  rg1: { dmg: 100, rpm: 70, headMult: 2.2, moveMul: 0.95 }, // 3 body / 2 with a head (head = 220)
+  rg1: { dmg: 1000, rpm: 70, headMult: 1, moveMul: 0.95 }, // one shot, one kill: the cost is the 1 s charge and a reload after every shot
   bruiser: { dmg: 36, rpm: 470, mag: 60, moveMul: 0.84 },   // 7 hits, ~0.77 s, heavy recoil
   cr56: { dmg: 21, rpm: 800, moveMul: 1.01 },               // 12 hits, ~0.83 s, easy to control
   slug: { dmg: 70, rpm: 150, headMult: 1.8, moveMul: 0.98 },// 4 hits at any sane range
@@ -1434,7 +1435,7 @@ tune('double_s', 'double', 'DB-2 SAWN-OFF', F.bone, { dmg: 1.2, spread: 1.5, mov
 tune('rt7_t', 'rt7', 'RT-7 TACTICAL', F.navy, { mag: 1.3, spread: 0.85, reload: 1.1 });
 // long guns
 tune('sniper_l', 'sniper', 'LH-7 LIGHT', F.arctic, { dmg: 0.85, rpm: 1.3, moveMul: 1.05, adsSpeed: 1.25 });
-tune('rg1_c', 'rg1', 'RG-1 CAPACITOR', F.violet, { dmg: 1.3, rpm: 0.7, mag: 0.6 });
+tune('rg1_c', 'rg1', 'RG-1 OVERCHARGE', F.violet, {}, { charge: 1.5, railBlast: 3.2, reload: 2.1, reloadEmpty: 2.1 });   // slower to charge; the slug explodes where it lands
 tune('lever_b', 'lever', 'LV-44 BRUSH', F.rust, { rpm: 1.25, dmg: 0.9, moveMul: 1.03 });
 tune('amr_d', 'amr', 'AMR-50 DESERT', F.sand, { dmg: 1.1, rpm: 0.85, recoil: 1.15 });
 // machine guns

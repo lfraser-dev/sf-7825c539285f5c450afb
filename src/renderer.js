@@ -160,7 +160,7 @@ void main() {
   bool world = uShadowOn > 0.5;
 
   // ---- realistic surfaces (uGrid >= 2 picks a procedural material instead of the sandbox grid)
-  float tRough = -1.0, tMetal = -1.0, tGlow = 0.0;
+  float tRough = -1.0, tMetal = -1.0, tGlow = 0.0, gunFill = 0.0;
   if (uGrid > 1.5) {
     int k = int(uGrid + 0.5);
     vec3 an = abs(n);
@@ -333,13 +333,48 @@ void main() {
       vec3 lp = vLocal * uScale;
       float grain = noise(lp * 900.0) * 0.6 + noise(lp * 230.0) * 0.4;
       float streak = noise(vec3(lp.x * 1400.0, lp.y * 1400.0, lp.z * 30.0));
-      base *= 0.9 + 0.12 * grain + 0.05 * streak;
+      base = base * 0.92 + vec3(0.04, 0.042, 0.047);                  // nothing is pure black: lifted so the shapes read
+      gunFill = 1.0;
+      vec3 ln6 = abs(vLocalN);
+      vec2 uv6 = ln6.x > 0.5 ? lp.zy : (ln6.y > 0.5 ? lp.xz : lp.xy);
+      float mR = uMat.y, mM = uMat.x;
+      if (mM < 0.05 && mR > 0.85) {
+        // rubber grips: moulded diamond stippling
+        vec2 d6 = vec2(uv6.x + uv6.y, uv6.x - uv6.y) * 330.0;
+        float dia = max(abs(fract(d6.x) - 0.5), abs(fract(d6.y) - 0.5));
+        base *= 0.78 + 0.5 * smoothstep(0.28, 0.46, dia) + 0.06 * grain;
+        tRough = 0.8 - 0.2 * smoothstep(0.3, 0.46, dia);
+      } else if (mM < 0.05 && mR > 0.55) {
+        // polymer furniture: a fine pebbled texture
+        float peb = noise(lp * 1500.0);
+        base *= 0.88 + 0.2 * peb + 0.06 * grain;
+        tRough = 0.5 + 0.2 * peb;
+      } else if (mM < 0.05 && mR > 0.45 && mR < 0.52) {
+        // wood: long grain with darker figure
+        float gw = noise(vec3(uv6.x * 14.0, uv6.y * 260.0, 3.0) + noise(lp * 40.0) * 1.5);
+        base *= 0.72 + 0.5 * gw;
+        base = mix(base, base * vec3(1.15, 0.95, 0.8), 0.4);
+        tRough = 0.38 + 0.2 * gw;
+      } else {
+        // metal and paint: machining streaks along the part, a satin sheen, and the odd bright scratch
+        float lng = uScale.z > uScale.x && uScale.z > uScale.y ? lp.z : (uScale.x > uScale.y ? lp.x : lp.y);
+        float brush = noise(vec3(uv6 * 1800.0, 1.0) - vec3(lng * 1750.0, 0.0, 0.0));
+        base *= 0.9 + 0.1 * grain + 0.07 * streak + 0.05 * brush;
+        float sc = noise(vec3(uv6.x * 900.0 + uv6.y * 260.0, uv6.y * 40.0, 5.0));
+        float scratch = smoothstep(0.86, 0.9, sc) * step(0.55, noise(lp * 35.0));
+        base = mix(base, base * 1.5 + vec3(0.06), scratch * 0.5);
+      }
       vec3 dE = uScale * 0.5 - abs(lp);
       float a0 = min(dE.x, min(dE.y, dE.z)), c0 = max(dE.x, max(dE.y, dE.z));
       float b0 = dE.x + dE.y + dE.z - a0 - c0;                       // distance to the nearest edge
-      float wear = (1.0 - smoothstep(0.0005, 0.0026, b0)) * (0.55 + 0.45 * noise(lp * 600.0));
+      // every edge catches the light (a thin bright bevel), and the paint is worn through to bare metal along it
+      float bevel = 1.0 - smoothstep(0.0004, 0.0019, b0);
+      float wear = (1.0 - smoothstep(0.0005, 0.0042, b0)) * smoothstep(0.35, 0.7, noise(lp * 420.0) * 0.7 + noise(lp * 90.0) * 0.5);
       float darkPaint = 1.0 - smoothstep(0.12, 0.45, dot(base, vec3(0.3, 0.55, 0.15)));
-      base = mix(base, base * 1.5 + vec3(0.05), wear * (0.25 + 0.5 * darkPaint));
+      base = mix(base, base * 1.5 + vec3(0.06), bevel * (0.35 + 0.4 * darkPaint));
+      base = mix(base, mM > 0.05 ? vec3(0.5, 0.51, 0.54) : base * 1.35 + vec3(0.04), wear * (0.3 + 0.35 * darkPaint));
+      // a darker line just inside the bevel, like a machined step
+      base *= 1.0 - 0.22 * smoothstep(0.0019, 0.003, b0) * (1.0 - smoothstep(0.003, 0.0052, b0));
     } else if (k == 15) {
       // the sea: a rolling swell with glints, darker in the troughs
       vec2 q = vWorld.xz;
@@ -360,7 +395,12 @@ void main() {
       // ---- animated weapon skins. The part's colour carries live values instead of a colour:
       // r = energy (heat from firing), g = the part's original brightness (dark parts get the dark variant),
       // b = streak (kills this life, 0..1). Patterns live in the part's own space so they don't swim as the gun moves.
-      float E = uColor.r, T = uColor.g, S = uColor.b;
+      // (red packs two values: the whole part is heat x100, the fraction is the kill pulse)
+      float E = min(1.0, floor(uColor.r) / 100.0), KP = fract(uColor.r), T = uColor.g, S = uColor.b;
+      gunFill = 0.6;
+      vec3 sig = k == 40 ? vec3(0.3, 0.65, 1.0) : k == 41 ? vec3(1.0, 0.5, 0.08) : k == 42 ? vec3(0.7, 0.8, 0.95) : k == 43 ? vec3(0.8, 0.86, 0.95)
+        : k == 44 ? vec3(1.0, 0.45, 0.05) : k == 45 ? vec3(0.65, 0.25, 1.0) : k == 46 ? vec3(1.0, 0.45, 0.9) : k == 47 ? vec3(0.15, 1.0, 0.85)
+        : k == 48 ? vec3(0.5, 0.85, 1.0) : k == 49 ? vec3(0.4, 0.68, 1.0) : k == 50 ? vec3(1.0, 0.08, 0.06) : k == 51 ? vec3(0.85, 0.95, 1.0) : vec3(1.0, 0.8, 0.3);
       float dk = 1.0 - smoothstep(0.1, 0.2, T);
       vec3 lp = vLocal * uScale + vec3(hash(uScale * 37.0), hash(uScale * 53.0), hash(uScale * 71.0)) * 0.3;
       vec3 ln = abs(vLocalN);
@@ -374,14 +414,22 @@ void main() {
         float h = hash(vec3(floor(c / 3.0), 1.0)) * 0.6 + hash(vec3(c, 2.0)) * 0.4;
         base = h < 0.35 ? vec3(0.08, 0.1, 0.14) : h < 0.65 ? vec3(0.22, 0.32, 0.46) : vec3(0.55, 0.62, 0.7);
         base *= mix(1.0, 0.45, dk);
-        tRough = 0.6; tMetal = 0.1;
+        // some pixels are lit: they blink on and off, more of them as the gun heats up
+        float lit = step(0.93 - E * 0.25, hash(vec3(c, floor(t * 3.0 + hash(vec3(c, 3.0)) * 5.0))));
+        base = mix(base, vec3(0.35, 0.85, 1.0), lit);
+        tGlow = lit * 1.4;
+        tRough = 0.45; tMetal = 0.25;
       } else if (k == 41) {
         // TIGER: bold wavy stripes, orange on black
         float w = q.x * 34.0 + q.y * 9.0 + noise(lp * 26.0) * 5.0;
         float st = smoothstep(0.55, 0.62, sin(w) * 0.5 + 0.5 + noise(lp * 60.0) * 0.12);
         base = mix(vec3(1.0, 0.45, 0.06), vec3(0.03, 0.025, 0.02), st);
         base *= mix(1.0, 0.4, dk);
-        tRough = 0.45; tMetal = 0.15;
+        // the edges of the stripes smoulder, and flare up when you fire
+        float rimS = st * (1.0 - st) * 4.0;
+        base = mix(base, vec3(1.0, 0.8, 0.3), rimS * (0.35 + 0.65 * E));
+        tGlow = rimS * (0.5 + 1.6 * E) * (0.75 + 0.25 * sin(t * 5.0 + q.x * 60.0));
+        tRough = 0.35; tMetal = 0.3;
       } else if (k == 42) {
         // CARBON FIBRE: a tight 2x2 twill weave with a sheen that moves as you turn it
         vec2 c = q * 260.0;
@@ -389,10 +437,14 @@ void main() {
         float f = cell > 0.5 ? fract(c.x) : fract(c.y);
         float thread = sin(f * 3.14159);
         base = vec3(0.05, 0.05, 0.06) + vec3(0.1, 0.105, 0.12) * thread * (0.4 + 0.9 * fres);
-        tRough = 0.22; tMetal = 0.35;
+        // red thread woven through every eighth tow; it glows as the gun heats
+        float redT = step(7.0, mod(floor(c.x) - floor(c.y), 8.0)) * thread;
+        base = mix(base, vec3(0.9, 0.08, 0.05), redT * 0.8);
+        tGlow = redT * E * 1.2;
+        tRough = 0.14; tMetal = 0.45;
       } else if (k == 43) {
         // DAMASCUS: folded steel, wavy layers of bright and dark
-        float w = q.x * 70.0 + noise(lp * 18.0) * 9.0 + noise(lp * 55.0) * 2.0 + q.y * 20.0;
+        float w = q.x * 70.0 + noise(lp * 18.0 + vec3(0.0, t * 0.05, 0.0)) * 9.0 + noise(lp * 55.0) * 2.0 + q.y * 20.0 + t * (0.4 + E * 3.0);
         float l = sin(w) * 0.5 + 0.5;
         base = mix(vec3(0.2, 0.21, 0.23), vec3(0.78, 0.8, 0.83), smoothstep(0.35, 0.65, l));
         base *= mix(1.0, 0.55, dk);
@@ -512,7 +564,34 @@ void main() {
         base = mix(vec3(1.0, 0.76, 0.25), vec3(1.0, 0.95, 0.75), sweep);
         base *= mix(1.0, 0.55, dk);
         tGlow = sweep * 0.6 + E * 0.5;
-        tRough = 0.18; tMetal = 1.0;
+        // engraved filigree: fine scrollwork cut into the gold
+        float fil = sin(q.x * 190.0 + sin(q.y * 150.0) * 2.5) * sin(q.y * 190.0 + sin(q.x * 150.0) * 2.5);
+        base *= 1.0 - 0.35 * smoothstep(0.55, 0.9, fil);
+        tRough = 0.14; tMetal = 1.0;
+      }
+      // ---- shared by every live skin ----
+      // a band of light sweeps down the gun; faster and brighter the more kills you have this life
+      float swp = fract(t * (0.2 + 0.55 * S) - (lp.z * 1.4 + lp.y * 0.8 + lp.x * 0.5));
+      float sheen = smoothstep(0.0, 0.05, swp) * (1.0 - smoothstep(0.05, 0.16, swp));
+      base += sig * sheen * (0.14 + 0.5 * S);
+      tGlow += sheen * (0.08 + 0.7 * S);
+      // an aura of the skin's colour round the edges: it grows with every kill
+      float aura = fres * (0.1 + 1.0 * S) * (0.8 + 0.2 * sin(t * 6.0 + lp.z * 40.0));
+      base = mix(base, sig, clamp(aura * 0.35, 0.0, 0.45));
+      tGlow += aura * 0.9;
+      // on a streak, embers drift across it
+      if (S > 0.15) {
+        vec2 ec = floor(q * 170.0 + vec2(0.0, t * 2.5));
+        float ember = step(1.0 - 0.025 * S, hash(vec3(ec, 7.0)));
+        base = mix(base, min(sig * 1.3, vec3(1.0)), ember);
+        tGlow += ember * 2.0;
+      }
+      // a kill: a shockwave of light tears through the pattern, bigger with each kill
+      if (KP > 0.004) {
+        float wv = sin(length(lp) * 70.0 - (1.0 - KP) * 34.0) * 0.5 + 0.5;
+        float kf = clamp(KP * (0.3 + 0.7 * wv), 0.0, 0.8);
+        base = mix(base, mix(sig, vec3(1.0), 0.35), kf);
+        tGlow += kf * 2.4;
       }
     }
   } else if (uGrid > 0.5) {
@@ -602,6 +681,20 @@ void main() {
 
   vec3 col = albedo * (1.0 - metal * 0.88) * (hemi * ao + sunCol * ndl * sh) + sunCol * spec * ndl * sh * (1.0 - edge * 0.5)
            + env * Fv * mix(0.25, 1.0, metal) * mix(0.08, 1.0, gloss) * ao;
+  if (gunFill > 0.0) {
+    // guns get their own soft fill and a second highlight from over your shoulder, so the side facing you isn't a black slab
+    vec3 K2 = normalize(V + vec3(0.25, 0.9, 0.15));
+    float n2 = max(dot(n, K2), 0.0);
+    col += albedo * (1.0 - metal * 0.6) * vec3(0.75, 0.8, 0.9) * (0.35 + 0.65 * n2) * gunFill * (indoor ? 0.6 : 1.0);
+    col += F0 * pow(n2, mix(60.0, 10.0, rough)) * mix(1.6, 0.35, rough) * gunFill;
+  }
+  if (!world && uMat.x < 0.01 && abs(uMat.y - 0.55) < 0.01) {
+    // skin: light bleeds round the shadow edge in red, and thin edges (fingers, ears) glow warm against the light
+    float wrap = max((dot(n, L) + 0.5) / 1.5, 0.0) - ndl;
+    col += albedo * vec3(1.0, 0.3, 0.2) * sunCol * wrap * 0.4;
+    col += albedo * vec3(1.0, 0.45, 0.35) * pow(1.0 - ndv, 3.0) * 0.4;
+    col *= 0.94 + 0.1 * noise(vLocal * uScale * 900.0);          // pores: breaks up the plastic look
+  }
   // rim light (used for characters in the showroom / arena)
   col += toLin(uRim) * pow(1.0 - max(dot(n, V), 0.0), 3.0) * 1.6;
   col = mix(col, toLin(uColor) * 2.2, uEmissive);

@@ -402,7 +402,8 @@ function fire(w) {
   const muzzle = vmToWorld(w.gunPoint(d.muzzle));
   if (d.launcher) {
     const bolt = launcherKind === 'tether';
-    const v = camFwd.map((c, i) => c * (bolt ? 42 : 30) + (i === 1 ? (bolt ? 1 : 2.5) : 0) + player.vel[i] * 0.3);
+    const ls = HEAVY_STATS[launcherKind];
+    const v = camFwd.map((c, i) => c * (ls.speed || (bolt ? 42 : 30)) + (i === 1 ? ls.lift ?? (bolt ? 1 : 2.5) : 0) + player.vel[i] * 0.3);
     heavy.launch(launcherKind, muzzle, v, true, HEAVY_STATS[launcherKind].name);
     launcherT = 0.55;
     return;
@@ -425,7 +426,8 @@ function fire(w) {
       break;
     }
     const end = hit ? hit.point : [0, 1, 2].map((k) => o[k] + dir[k] * left);
-    if (i < 4) effects.tracer(muzzle, end);
+    if (d.charge) railFx(muzzle, end, dir, hit, d);
+    else if (i < 4) effects.tracer(muzzle, end);
     if (i === 0 && online.active) online.myShot(muzzle, end);
     if (!hit) continue;
     const b = hit.box;
@@ -475,8 +477,98 @@ function fire(w) {
   }
 }
 
+// the railgun's shot: a beam that hangs in the air with rings of sparks down its length, a crack of thunder, and a
+// blast of plasma where it lands
+const RAIL_COL = [0.35, 0.85, 1];
+function railFx(muzzle, end, dir, hit, d) {
+  const L = Math.hypot(end[0] - muzzle[0], end[1] - muzzle[1], end[2] - muzzle[2]);
+  effects.beam(muzzle, end, d.railBlast ? [0.75, 0.4, 1] : RAIL_COL, 1.1, 0.1);
+  const col = d.railBlast ? [0.8, 0.5, 1] : [0.55, 0.95, 1];
+  // rings spiralling out along the beam
+  const up = Math.abs(dir[1]) > 0.9 ? [1, 0, 0] : [0, 1, 0], r1 = norm(cross(dir, up)), r2 = cross(dir, r1);
+  for (let s = 1.2, n = 0; s < Math.min(L, 60) && n < 150; s += 0.45, n++) {
+    const a = s * 2.4, ca = Math.cos(a), sa = Math.sin(a), sp = 1.6;
+    effects.spawnPiece([0, 1, 2].map((k) => muzzle[k] + dir[k] * s + (r1[k] * ca + r2[k] * sa) * 0.06), [0.03, 0.03, 0.03], [0, 1, 2].map((k) => (r1[k] * ca + r2[k] * sa) * sp), col, 0.45 + Math.random() * 0.4, 1);
+    effects.debris[effects.debris.length - 1].noGravity = true;
+  }
+  effects.sparks(end, 34, col, 9, 0.7, 0.04, 2);
+  effects.sparks(end, 10, [1, 1, 1], 4, 0.4, 0.07, 1);
+  if (hit && hit.box.tag !== 'bot' && hit.box.tag !== 'dummy') blastWalls(end, 1.3, 200);
+  if (d.railBlast) heavy.boom(end.map((c, k) => c - dir[k] * 0.15), d.railBlast, 90, d.name, true, 'mini');
+  sounds.railShot?.();
+  player.shake = Math.max(player.shake || 0, 0.7);
+  fovKick = 9;
+  railFlash = 1;
+}
+let railFlash = 0, railEl = null;
+// while the railgun charges: sparks get sucked into the muzzle, the view tightens and shakes, and a ring fills round
+// the crosshair
+function updateRail(dt) {
+  const w = weapon(), ch = w?.def.charge && !launcherW ? w.chargeT || 0 : 0;
+  railFlash = Math.max(0, railFlash - dt * 3.5);
+  if (!railEl) {
+    railEl = document.createElement('div');
+    railEl.style.cssText = 'position:fixed;left:50%;top:50%;width:74px;height:74px;margin:-37px 0 0 -37px;border-radius:50%;pointer-events:none;z-index:6;opacity:0;-webkit-mask:radial-gradient(circle,transparent 30px,#000 31px);mask:radial-gradient(circle,transparent 30px,#000 31px)';
+    document.body.append(railEl);
+    railEl.glow = document.createElement('div');
+    railEl.glow.style.cssText = 'position:fixed;inset:0;pointer-events:none;z-index:5;opacity:0';
+    document.body.append(railEl.glow);
+  }
+  railEl.style.opacity = ch > 0.01 ? 1 : 0;
+  if (ch > 0.01) railEl.style.background = `conic-gradient(${ch > 0.85 ? '#fff' : '#5fe0ff'} ${ch * 360}deg, rgba(255,255,255,.14) 0)`;
+  const g = Math.max(ch * ch * 0.55, railFlash);
+  railEl.glow.style.opacity = g > 0.01 ? g : 0;
+  if (g > 0.01) railEl.glow.style.background = railFlash > ch * ch * 0.55 ? `rgba(200,240,255,${0.55 * railFlash})` : 'radial-gradient(circle, transparent 35%, rgba(60,190,255,.55) 100%)';
+  if (ch <= 0) return;
+  player.shake = Math.max(player.shake || 0, ch * ch * 0.22);
+  fovKick = Math.min(fovKick, -9 * ch);
+  const mz = vmToWorld(w.gunPoint(w.def.muzzle));
+  for (let i = 0; i < 3; i++) {
+    if (Math.random() > dt * 60 * (0.3 + ch)) continue;
+    // a spark starts out in a shell round the muzzle and flies in
+    const a = Math.random() * Math.PI * 2, e = Math.random() * Math.PI - Math.PI / 2, r = 0.35 + Math.random() * 0.5, life = 0.22;
+    const off = [Math.cos(a) * Math.cos(e) * r, Math.sin(e) * r, Math.sin(a) * Math.cos(e) * r];
+    effects.spawnPiece(mz.map((c, k) => c + off[k] + player.vel[k] * life), [0.014, 0.014, 0.014], off.map((v, k) => -v / life * 4.2 * 0.26 + player.vel[k]), [0.5, 0.95, 1], life, 1);
+    effects.debris[effects.debris.length - 1].noGravity = true;
+  }
+}
+
+// ---- live skins: every kill sets the gun off, and the more kills this life the bigger it gets
+// each live skin's signature colour and the kind of burst it throws
+const SKIN_KILL = {
+  40: [[0.3, 0.6, 1], 'bits'], 41: [[1, 0.5, 0.08], 'slash'], 42: [[0.75, 0.8, 0.9], 'bits'], 43: [[0.8, 0.85, 0.9], 'slash'],
+  44: [[1, 0.45, 0.05], 'fire'], 45: [[0.65, 0.2, 1], 'implode'], 46: [[1, 0.4, 0.9], 'rainbow'], 47: [[0.15, 1, 0.85], 'bits'],
+  48: [[0.55, 0.85, 1], 'shards'], 49: [[0.8, 0.9, 1], 'bolt'], 50: [[0.95, 0.05, 0.05], 'slash'], 51: [[0.9, 0.97, 1], 'shards'], 52: [[1, 0.8, 0.25], 'coins'],
+};
+let skinKillT = 0, skinKillAmp = 0, lastHitPt = null;
+function skinKill(at) {
+  skinStreak++; skinHeat = Math.min(1, skinHeat + 0.45);
+  const tex = weapon()?.def.liveSkin;
+  if (!tex) return;
+  const [col, kind] = SKIN_KILL[tex] || [[1, 1, 1], 'bits'];
+  const tier = Math.min(5, skinStreak), k = tier / 5;           // 1..5 kills: each one bigger
+  skinKillT = 1; skinKillAmp = 0.45 + 0.55 * k;
+  // off the gun itself: a burst of sparks from the muzzle
+  if (!launcherW) effects.sparks(vmToWorld(weapon().gunPoint(weapon().def.muzzle)), 4 + tier * 3, col, 2.5, 0.35, 0.012, 0.5);
+  if (!at) return;
+  const p = [at[0], at[1], at[2]], n = 10 + tier * 9;
+  const rainbow = () => { const h = Math.random() * 6.283; return [0.5 + 0.5 * Math.cos(h), 0.5 + 0.5 * Math.cos(h + 2.09), 0.5 + 0.5 * Math.cos(h + 4.19)]; };
+  if (kind === 'fire') { for (let i = 0; i < n; i++) { const a = Math.random() * 6.283, sp = 2 + Math.random() * (3 + 4 * k); effects.flame(p, [Math.cos(a) * sp, 2 + Math.random() * 5, Math.sin(a) * sp], 1.4 + k * 1.6); } effects.sparks(p, n, [1, 0.8, 0.3], 6 + 4 * k, 0.8, 0.03, 3); }
+  else if (kind === 'coins') { for (let i = 0; i < n; i++) { const a = Math.random() * 6.283, sp = 2 + Math.random() * (3 + 3 * k); effects.spawnPiece(p, [0.07, 0.012, 0.07], [Math.cos(a) * sp, 4 + Math.random() * 5, Math.sin(a) * sp], [1, 0.8, 0.25], 1.6 + Math.random(), 0.35); const d = effects.debris[effects.debris.length - 1]; d.shape = 'cylY'; d.mat = 'brass'; } sounds.coins?.(); }
+  else if (kind === 'implode') { for (let i = 0; i < n * 1.5; i++) { const a = Math.random() * 6.283, e = Math.random() * 3.14 - 1.57, r = 1 + Math.random() * (1 + 2 * k), life = 0.35; const off = [Math.cos(a) * Math.cos(e) * r, Math.sin(e) * r, Math.sin(a) * Math.cos(e) * r]; effects.spawnPiece(p.map((c, j) => c + off[j]), [0.04, 0.04, 0.04], off.map((v) => -v / life * 1.1), Math.random() < 0.3 ? [1, 1, 1] : col, life, 1); effects.debris[effects.debris.length - 1].noGravity = true; } }
+  else if (kind === 'bolt') { let q = [p[0], p[1] + 9 + 6 * k, p[2]]; for (let i = 0; i < 7; i++) { const t = (i + 1) / 7, nx = [p[0] + (i < 6 ? (Math.random() - 0.5) * 1.6 : 0), p[1] + (9 + 6 * k) * (1 - t), p[2] + (i < 6 ? (Math.random() - 0.5) * 1.6 : 0)]; effects.beam(q, nx, col, 0.3 + 0.25 * k, 0.03 + 0.04 * k); q = nx; } effects.sparks(p, n, col, 8, 0.5, 0.03, 2); sounds.boom?.(0.35 + 0.3 * k); }
+  else if (kind === 'shards') { for (let i = 0; i < n; i++) { const a = Math.random() * 6.283, sp = 3 + Math.random() * (4 + 4 * k); effects.spawnPiece(p, [0.02, 0.02, 0.09 + Math.random() * 0.12], [Math.cos(a) * sp, 1 + Math.random() * 6, Math.sin(a) * sp], col, 1 + Math.random(), 0.8); } }
+  else if (kind === 'slash') { for (let j = 0; j < 1 + Math.floor(k * 2.5); j++) { const a = Math.random() * 6.283, u = [Math.cos(a), 0.5 + Math.random(), Math.sin(a)]; effects.beam(p.map((c, i) => c - u[i] * (0.9 + k)), p.map((c, i) => c + u[i] * (0.9 + k)), col, 0.3, 0.035); } effects.sparks(p, n, col, 7 + 3 * k, 0.6, 0.03, 2); }
+  else for (let i = 0; i < n; i++) effects.sparks(p, 1, kind === 'rainbow' ? rainbow() : Math.random() < 0.25 ? [1, 1, 1] : col, 6 + 4 * k, 0.8, 0.04, 2.5);
+  // a ring of light racing out along the ground: wider with every kill
+  for (let i = 0; i < 16 + tier * 4; i++) { const a = i / (16 + tier * 4) * 6.283, sp = 5 + 5 * k; effects.spawnPiece([p[0], p[1] - 0.6, p[2]], [0.05, 0.05, 0.05], [Math.cos(a) * sp, 0.2, Math.sin(a) * sp], kind === 'rainbow' ? rainbow() : col, 0.45 + 0.25 * k, 1); effects.debris[effects.debris.length - 1].noGravity = true; }
+  if (tier >= 3) player.shake = Math.max(player.shake || 0, 0.1 * tier);
+  if (skinStreak === 3 || skinStreak === 5 || (skinStreak > 5 && skinStreak % 5 === 0)) banner(skinStreak >= 5 ? 'UNSTOPPABLE' : 'ON FIRE', `${skinStreak} KILL STREAK`, 'good', 1.1);
+}
+
 // apply your damage to a target (a range dummy, a bot, or another player online)
 function hitTarget(dummy, dmg, head, point, dir, wname, burn = false) {
+  lastHitPt = point;
   if (buffOn('overdrive') && wname !== 'BULL CHARGE') dmg *= 1.25;
   const num = { pos: [...point], amount: dmg, head, burn, t: 0, el: null, drift: Math.random() - 0.5 };
   if (dummy.remote) {
@@ -489,6 +581,7 @@ function hitTarget(dummy, dmg, head, point, dir, wname, burn = false) {
   if (dummy.agent) dummy.agent.lastHitBy = tdm.you;      // deathmatch kill credit
   const dead = dummy.damage(dmg, dir);
   if (dead) { stats.kills++; burning.delete(dummy); }
+  if (dead && !dummy.name) skinKill(point);                 // range dummies count too, so you can see your skin go off
   if (dead && dummy.name) killFeed('YOU', burn ? `${wname} 🔥` : wname, dummy.name, head);
   if (!burn || dead) showHitmarker(dead, head);
   damageNumbers.push(num);
@@ -648,14 +741,16 @@ function earn(n) { cosmetics.credits += n; matchEarned += n; saveCosmetics(cosme
 function skinShot(d) { skinHeat = Math.min(1, skinHeat + Math.min(0.35, 0.025 + 8 / (d.rpm || 600))); }
 function updateSkinLive(dt) {
   skinHeat = Math.max(0, skinHeat - dt * (skinHeat > 0.6 ? 0.28 : 0.4));
+  skinKillT = Math.max(0, skinKillT - dt * 0.9);
   const S = Math.min(1, skinStreak / 5);
   for (const w of slots) {
     if (!w?.def?.liveSkin) continue;
-    for (const p of w.def.parts) if (p.tex >= 40) { p.col[0] = skinHeat; p.col[2] = S; }
+    // red carries two things: whole part = heat (0..100), fraction = the kill pulse (see the shader)
+    for (const p of w.def.parts) if (p.tex >= 40) { p.col[0] = Math.floor(skinHeat * 100) + Math.min(0.99, skinKillT * skinKillAmp); p.col[2] = S; }
   }
 }
 function killFeed(a, weaponName, b, head) {
-  if (a === 'YOU' && b !== 'YOU') { skinStreak++; skinHeat = Math.min(1, skinHeat + 0.45); if (tdm.active) {
+  if (a === 'YOU' && b !== 'YOU') { skinKill(lastHitPt); if (tdm.active) {
       const tdk = Object.values(TAKEDOWNS).some((t) => t.name === weaponName);
       earn(tdk ? 50 : 25); gainXp(tdk ? XP.takedown : XP.kill, tdk ? 'TAKEDOWN' : 'KILL');
       const gun = gunByName(String(weaponName).replace(' 🔥', ''));
@@ -1121,11 +1216,11 @@ const botHooks = {
       lob(id, 24);
       return HEAVY_STATS[id].cd + Math.random() * 6;
     }
-    if (id === 'dronepod' || id === 'swarmpod') {
+    if (POD_V[id] !== undefined) {
       if (dist > 30) return 1;
       const sp = gadgets.padSpot([p[0], p[1] + 1.5, p[2]], [0, -1, 0], p, 0.35);
       if (!sp) return 2;
-      gadgets.place(spec({ k: 'pod', v: id === 'swarmpod' ? 'swarm' : undefined, ax: 0, ...sp }));
+      gadgets.place(spec({ k: 'pod', v: POD_V[id] || undefined, ax: 0, ...sp }));
       return HEAVY_STATS[id].cd + Math.random() * 8;
     }
     if (id === 'mines') {
@@ -1452,6 +1547,7 @@ function flashAt(pos) {
 }
 
 // ---------- heavy weapons (Q) ----------
+const POD_V = { dronepod: '', swarmpod: 'swarm', hunterpod: 'hunter', hivepod: 'hive' };      // pod id -> the gadget's variant
 function useHeavy() {
   if (player.dead) return;
   if (launcherW) { putAwayLauncher(false); return; }
@@ -1484,10 +1580,10 @@ function useHeavy() {
       n++;
     }
     if (!n) { noRoom(); return; }
-  } else if (id === 'dronepod' || id === 'swarmpod') {
+  } else if (POD_V[id] !== undefined) {
     const spot = gadgets.padSpot(player.eye(), player.forward(), player.pos, 0.35);
     if (!spot) { noRoom(); return; }
-    placeGadget({ k: 'pod', v: id === 'swarmpod' ? 'swarm' : undefined, ax: 0, ...spot });
+    placeGadget({ k: 'pod', v: POD_V[id] || undefined, ax: 0, ...spot });
   } else {
     const spot = gadgets.turretSpot(player.pos, player.yaw);
     if (!spot) { noRoom(); return; }
@@ -3021,6 +3117,7 @@ function frameBody(now) {
     updateNavHoles(dt);
     updateSkinLive(dt);
     updateBuffs(dt);
+    updateRail(dt);
     updateHealing(dt);
     if (playerBurn) {
       playerBurn.t -= dt; playerBurn.acc += playerBurn.dps * dt;
@@ -3174,7 +3271,12 @@ function frameBody(now) {
     bench.layout(pts);
   } else {
     if (cloakT > 0) for (const p of vmParts) renderer.drawPart({ ...p, color: p.color.map((c, i) => c * 0.35 + [0.35, 0.6, 1][i] * 0.4), emissive: Math.max(p.emissive || 0, 0.35) });
-    else for (const p of vmParts) renderer.drawPart(p);
+    else {
+      // solid parts first, then the see-through ones (the railgun's plasma halo) blended over the top
+      let glow = false;
+      for (const p of vmParts) { if (p.alpha != null && p.alpha < 1) glow = true; else renderer.drawPart(p); }
+      if (glow) { renderer.setBlend(true); for (const p of vmParts) if (p.alpha != null && p.alpha < 1) renderer.drawPart(p); renderer.setBlend(false); }
+    }
   }
 
   updateHud(dt, vfov);
@@ -3184,4 +3286,4 @@ function frameBody(now) {
 requestAnimationFrame(frame);
 
 // handy for debugging from the console / automated tests
- window.game = { kf: (...a) => killFeed(...a), daily, gainXp: (n, l) => gainXp(n, l), progress, skinLive: (h, s) => { skinHeat = h; skinStreak = s; }, startTakedown, updateTakedown, findDowned, takedownParts, get td() { return td; }, get deathT() { return deathT; }, nextInCase, useBuff, get buff() { return { kind: buffKind, t: buffT }; }, setThrow: (k) => { equippedThrow = k; throwCharges = 2; }, useThrowable, get throwCharges() { return throwCharges; }, get flashT() { return flashT; }, heavy, useHeavy, applyClass, useGadget, useTether, useCloak, get cloakT() { return cloakT; }, get launcherW() { return launcherW; }, gadgets, get burning() { return burning; }, lobby, online, get tdm() { return tdm; }, batches, renderer, map, ARENAS, get stadium() { return stadium; }, setArena: (i) => { stadium = ARENAS[i]; }, lifts, hooks: botHooks, updateFall, hookTarget, fallTop: () => fallTop, breakGlass, updateCombat, startMatch: (m) => startMatch(m), enterStadium, where: () => where, sr: () => showroomChar, cosmetics, refreshGuns, classLo, renderMenu, showTab, enterRange, cs: () => cutscene, botMgr, elevator, damagePlayer, pressConsole, setTimeScale: (v) => { timeScale = v; }, bench, openBench, closeBench, loadouts, applyLoadout, course, player, slots, weapon, world, stats, effects, dummies, walls, cases, input, start, setPlaying, resetRange, switchTo, pickUp, WEAPONS };
+ window.game = { kf: (...a) => killFeed(...a), daily, gainXp: (n, l) => gainXp(n, l), progress, skinLive: (h, s) => { skinHeat = h; skinStreak = s; }, startTakedown, updateTakedown, findDowned, takedownParts, get td() { return td; }, get deathT() { return deathT; }, nextInCase, skinKill, useBuff, get buff() { return { kind: buffKind, t: buffT }; }, setThrow: (k) => { equippedThrow = k; throwCharges = 2; }, useThrowable, get throwCharges() { return throwCharges; }, get flashT() { return flashT; }, heavy, useHeavy, applyClass, useGadget, useTether, useCloak, get cloakT() { return cloakT; }, get launcherW() { return launcherW; }, gadgets, get burning() { return burning; }, lobby, online, get tdm() { return tdm; }, batches, renderer, map, ARENAS, get stadium() { return stadium; }, setArena: (i) => { stadium = ARENAS[i]; }, lifts, hooks: botHooks, updateFall, hookTarget, fallTop: () => fallTop, breakGlass, updateCombat, startMatch: (m) => startMatch(m), enterStadium, where: () => where, sr: () => showroomChar, cosmetics, refreshGuns, classLo, renderMenu, showTab, enterRange, cs: () => cutscene, botMgr, elevator, damagePlayer, pressConsole, setTimeScale: (v) => { timeScale = v; }, bench, openBench, closeBench, loadouts, applyLoadout, course, player, slots, weapon, world, stats, effects, dummies, walls, cases, input, start, setPlaying, resetRange, switchTo, pickUp, WEAPONS };

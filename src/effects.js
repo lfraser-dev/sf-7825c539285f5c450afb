@@ -9,11 +9,12 @@ export class Effects {
     this.world = world;
     this.debris = [];
     this.tracers = [];
+    this.beams = [];
     this.decals = [];
     this.m = mat4();
   }
 
-  clear() { this.debris.length = 0; this.tracers.length = 0; this.decals.length = 0; }
+  clear() { this.debris.length = 0; this.tracers.length = 0; this.beams.length = 0; this.decals.length = 0; }
 
   spawnPiece(pos, size, vel, color, life, emissive = 0) {
     if (this.debris.length >= MAX_DEBRIS) this.debris.shift();
@@ -95,6 +96,20 @@ export class Effects {
     this.decals.push({ model, size, life: 12 });
   }
 
+  // a thick beam that hangs in the air and fades (the railgun)
+  beam(from, to, col = [0.4, 0.85, 1], life = 0.7, width = 0.07) {
+    const d = sub(to, from), l = len(d);
+    if (l < 0.2) return;
+    this.beams.push({ from: [...from], dir: d, length: l, life, maxLife: life, col, width });
+  }
+  // a burst of glowing bits flying out from a point (sparks, shards, embers)
+  sparks(pos, n, col, speed = 6, life = 0.6, size = 0.035, up = 1.5) {
+    for (let i = 0; i < n; i++) {
+      const a = Math.random() * Math.PI * 2, e = Math.random() * Math.PI - Math.PI / 2, sp = speed * (0.35 + Math.random() * 0.65);
+      const s = size * (0.5 + Math.random());
+      this.spawnPiece(pos, [s, s, s], [Math.cos(a) * Math.cos(e) * sp, Math.sin(e) * sp + up, Math.sin(a) * Math.cos(e) * sp], col, life * (0.6 + Math.random() * 0.6), 1);
+    }
+  }
   tracer(from, to) {
     const d = sub(to, from), l = len(d);
     if (l < 0.5) return;
@@ -128,6 +143,7 @@ export class Effects {
     for (let i = this.tracers.length - 1; i >= 0; i--) {
       if ((this.tracers[i].life -= dt) <= 0) this.tracers.splice(i, 1);
     }
+    for (let i = this.beams.length - 1; i >= 0; i--) if ((this.beams[i].life -= dt) <= 0) this.beams.splice(i, 1);
     for (let i = this.decals.length - 1; i >= 0; i--) {
       if ((this.decals[i].life -= dt) <= 0) this.decals.splice(i, 1);
     }
@@ -161,6 +177,15 @@ export class Effects {
       if (d.life >= 0.5) continue;
       compose(this.m, d.pos, d.rot, d.size);
       r.draw(this.m, d.size, d.color, 0, d.shape ? 0 : 1, d.emissive, d.life / 0.5, d.shape, d.mat);
+    }
+    for (const b of this.beams) {
+      // a white-hot core inside a wider glow that swells and fades
+      const k = b.life / b.maxLife, center = b.from.map((c, i) => c + b.dir[i] / 2), ang = anglesFor(b.dir);
+      for (const [w, col, a] of [[b.width * (0.35 + 0.65 * k), [1, 1, 1], k], [b.width * (2.6 - 1.4 * k), b.col, k * 0.45], [b.width * (6 - 4 * k), b.col, k * k * 0.16]]) {
+        const s = [w, w, b.length];
+        compose(this.m, center, ang, s);
+        r.draw(this.m, s, col, 0, 0, 1, a);
+      }
     }
     for (const t of this.tracers) {
       // the tracer is a short streak travelling along the shot

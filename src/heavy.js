@@ -20,6 +20,14 @@ export const HEAVY_STATS = {
   gl_fire: { cd: 13, dmg: 30, r: 3.5, fire: 5, burn: { dps: 15, dur: 2 }, name: 'FIREBOMB LAUNCHER', col: [1, 0.35, 0.05] },
   tether: { name: 'TETHER LAUNCHER', col: TETHER_COL, grav: 0.35 },
   gl_cluster: { cd: 12, dmg: 20, r: 2.2, name: 'CLUSTER LAUNCHER', col: [0.25, 0.6, 1], bomblets: 5 },
+  // build 0.60: more heavy weapons, all fired from the same launcher
+  gl_rocket: { cd: 14, dmg: 125, r: 4.6, name: 'ROCKET LAUNCHER', col: [0.9, 0.15, 0.1], grav: 0.1, speed: 48, lift: 0.6, trail: true },
+  gl_mortar: { cd: 20, dmg: 150, r: 6.5, name: 'SIEGE MORTAR', col: [0.55, 0.35, 0.12], grav: 1.5, speed: 27, lift: 9 },
+  gl_carpet: { cd: 16, dmg: 18, r: 2, name: 'CARPET LAUNCHER', col: [0.2, 0.9, 0.5], bomblets: 9 },
+  gl_inferno: { cd: 18, dmg: 35, r: 4, fire: 8, fireR: 5.2, burn: { dps: 15, dur: 2 }, name: 'INFERNO LAUNCHER', col: [1, 0.12, 0] },
+  gl_breach: { cd: 12, dmg: 55, r: 3, wall: 6, name: 'BREACH LAUNCHER', col: [0.75, 0.76, 0.8] },
+  hunterpod: { cd: 22, drones: 1, dmg: 140, r: 4.2, speed: 24, name: 'HUNTER POD' },
+  hivepod: { cd: 24, drones: 5, dmg: 28, r: 2.3, speed: 18, name: 'HIVE POD' },
   bomblet: { dmg: 35, r: 2.5, name: 'CLUSTER LAUNCHER', col: [0.25, 0.6, 1], fuse: 0.9 },
   // throwables (Z), thrown by hand: they bounce, then go off on a fuse
   frag_t: { dmg: 90, r: 4.5, fuse: 1.7, name: 'FRAG GRENADE', col: [0.33, 0.37, 0.22], bounce: true },
@@ -117,7 +125,7 @@ export class Heavy {
   }
 
   // ---------------------------------------------------------------- explosions
-  boom(pos, r, dmg, name, mine, kind = 'frag') {
+  boom(pos, r, dmg, name, mine, kind = 'frag', fs = HEAVY_STATS.gl_fire) {
     if (kind === 'smoke' || kind === 'flash') { this.special(kind, pos, mine); return; }
     const fx = this.effects;
     const big = kind === 'mini' ? 0.7 : 1;
@@ -130,7 +138,7 @@ export class Heavy {
     this.sounds.boom?.(big);
     this.hooks.shake?.(pos, r);
     this.hooks.blast?.(pos, r * 0.9, dmg * 1.5);          // every machine blows the same holes in the walls
-    if (kind === 'fire') this.fires.push({ pos: [...pos], r: HEAVY_STATS.gl_fire.r, t: HEAVY_STATS.gl_fire.fire, tick: 0, mine, name });
+    if (kind === 'fire') this.fires.push({ pos: [...pos], r: fs.fireR || fs.r, t: fs.fire, tick: 0, mine, name });
     if (!mine) return;
     if (mine === true) this.hooks.send?.({ t: 'boom', p: pos.map((v) => +v.toFixed(2)), r, k: kind, dm: dmg });
     const from = [pos[0], pos[1] + 0.3, pos[2]];
@@ -161,7 +169,8 @@ export class Heavy {
     this.grenades.splice(this.grenades.indexOf(gr), 1);
     if (!gr.mine) return;             // the owner sends the explosion
     if (gr.kind === 'smoke' || gr.kind === 'flash') { this.special(gr.kind, at, gr.mine); return; }
-    this.boom(at, s.r, s.dmg, gr.name, gr.mine, s.fire ? 'fire' : gr.kind === 'bomblet' || s.bomblets ? 'mini' : 'frag');
+    this.boom(at, s.r, s.dmg, gr.name, gr.mine, s.fire ? 'fire' : gr.kind === 'bomblet' || s.bomblets ? 'mini' : 'frag', s.fire ? s : undefined);
+    if (s.wall) this.hooks.blast?.(at, s.wall, 500);            // breaching charge: takes the whole wall with it
     if (s.bomblets) {
       // five bomblets thrown out in a ring
       for (let k = 0; k < s.bomblets; k++) {
@@ -240,6 +249,7 @@ export class Heavy {
       }
       for (let k = 0; k < 3; k++) gr.pos[k] += step[k];
       if (gr.kind !== 'tether' && Math.random() < dt * 30) this.effects.dust(gr.pos, 1);
+      if (HEAVY_STATS[gr.kind].trail) this.effects.flame(gr.pos, gr.vel.map((v) => -v * 0.08), 0.9);    // rocket exhaust
     }
   }
 
@@ -326,7 +336,7 @@ export class Heavy {
   podOpened(pod) {
     const side = this.sideOf(pod);
     if (!side) return;          // the owner flies them; others get positions
-    const s = HEAVY_STATS[pod.v === 'swarm' ? 'swarmpod' : 'dronepod'];
+    const s = HEAVY_STATS[{ swarm: 'swarmpod', hunter: 'hunterpod', hive: 'hivepod' }[pod.v] || 'dronepod'];
     for (let k = 0; k < s.drones; k++) {
       const a = (k / s.drones) * Math.PI * 2 + Math.random();
       this.drones.push({

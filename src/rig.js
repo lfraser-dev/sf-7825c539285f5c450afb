@@ -49,6 +49,11 @@ export class Builder {
     this.out.push({ model: this.basisModel(pos, b, size), scale: size, color, emissive: em, shape: r, mat: this.mat });
   }
 
+  // a rounded box that narrows towards the bottom: taper = [kx, kz], the bottom's width and depth as a fraction of the top's
+  tbox(pos, b, size, r, taper, color, em = 0) {
+    if (this.k !== 1 && this.k) { size = size.map((v) => v * this.k); r *= this.k; }
+    this.out.push({ model: this.basisModel(pos, b, size), scale: size, color, emissive: em, shape: { taper, r }, mat: this.mat });
+  }
   cyl(pos, b, size, color, em = 0) {   // cylinder along the basis' back axis
     if (this.k !== 1 && this.k) size = size.map((v) => v * this.k);
     this.out.push({ model: this.basisModel(pos, b, size), scale: size, color, emissive: em, shape: 'cyl', mat: this.mat });

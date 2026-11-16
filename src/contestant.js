@@ -260,7 +260,12 @@ export class Contestant {
     const facing = (v, upHint = [0, 1, 0]) => basisFrom(Math.abs(v[1]) > 0.95 ? [1, 0, 0] : upHint, v);
     // z of the front of the outermost torso layer at torso-space (x, y): lets neckwear lie on the clothes
     const layerK = S.jacket ? (S.jacketStyle === 'puffer' ? 1.38 : 1.09) : S.vest ? (S.vestStyle === 'waistcoat' ? 1.08 : 1.36) : 1;
+    // The body and fitted clothes are flat-fronted slabs now (not balls), so the front is a plane per layer; only the
+    // puffer is still rounded.
+    const puffy = S.jacket && S.jacketStyle === 'puffer';
+    const frontZ = (S.jacket ? 0.124 : S.vest ? (S.vestStyle === 'waistcoat' ? 0.114 : 0.166) : 0.106) * b;
     const chestFront = (x, y) => {
+      if (!puffy) return -frontZ;
       const ex = x / (0.19 * b * layerK * TORSO_K), ey = (y - 0.42) / (0.2 * layerK * TORSO_K);
       const q = 1 - ex * ex - ey * ey;
       return q > 0 ? 0.006 - 0.116 * b * layerK * TORSO_K * Math.sqrt(q) : 0.006;
@@ -286,17 +291,17 @@ export class Contestant {
       const ankle = add3(foot, [0, 0.07, 0.02]);
       if (side > 0) this.footW = W(foot);
       const shinTop = lerp3(knee, ankle, 0.04);
-      bd.ellipsoid(W(add3(hip, [-side * 0.012, 0.01, 0])), HB0, [0.176 * b, 0.18 * b, 0.18 * b], low);         // hip joint fill
-      bd.capsule(W(hip), W(knee), 0.095 * b, 0.064 * b, low);
-      bd.ellipsoid(W(knee), HB0, [0.128 * b, 0.128 * b, 0.128 * b], low);                                      // knee fill
-      bd.capsule(W(knee), W(lerp3(knee, ankle, 0.8)), 0.064 * b, 0.054 * b, low);
+      bd.ellipsoid(W(add3(hip, [-side * 0.012, 0.01, 0])), HB0, [0.16 * b, 0.17 * b, 0.165 * b], low);         // hip joint fill
+      bd.capsule(W(hip), W(knee), 0.088 * b, 0.068 * b, low);
+      bd.ellipsoid(W(knee), HB0, [0.132 * b, 0.132 * b, 0.132 * b], low);                                      // knee fill
+      bd.capsule(W(knee), W(lerp3(knee, ankle, 0.8)), 0.066 * b, 0.052 * b, low);
       const KB = basisFrom(Wd(norm3(sub3(hip, ankle))), Wd([0, 0, 1]));
       const tmid = lerp3(hip, knee, 0.55);
       // a point on the trouser surface: t along the leg (0 hip .. 1 knee .. 2 ankle), angle around (0 = outside)
       const legPt = (t, ang, out = 0.004) => {
         const onThigh = t <= 1, u = onThigh ? t : t - 1;
         const c = onThigh ? lerp3(hip, knee, u) : lerp3(knee, ankle, u * 0.8);
-        const r = (onThigh ? 0.095 + (0.064 - 0.095) * u : 0.064 + (0.054 - 0.064) * u) * b * LEG_K + out;
+        const r = (onThigh ? 0.088 + (0.068 - 0.088) * u : 0.066 + (0.052 - 0.066) * u) * b * LEG_K + out;
         return [c[0] + side * Math.cos(ang) * r, c[1], c[2] - Math.sin(ang) * r];
       };
       if (legSt === 'cargo' || legSt === 'camo') {
@@ -356,16 +361,14 @@ export class Contestant {
 
     // ---- hips, belt, torso
     bd.k = TORSO_K;
-    bd.ellipsoid(T([0, -0.01, 0.005]), TB, [0.335 * b, 0.25, 0.235 * b], low);                                 // pelvis
+    bd.rbox(T([0, -0.005, 0.0]), TB, [0.31 * b, 0.2, 0.198 * b], 0.07, low);                                    // pelvis
     if (!S.zip) {
       bd.rbox(T([0, 0.085, 0]), TB, [0.315 * b, 0.045, 0.215 * b], 0.02, [0.1, 0.09, 0.08]);
       bd.rbox(T([0, 0.09, -0.112 * b]), TB, [0.065, 0.042, 0.02], 0.008, [0.72, 0.68, 0.52]);                       // buckle
     }
-    bd.capsule(T([0, 0.06, 0.0]), T([0, 0.3, 0.0]), 0.128 * b, 0.142 * b, top);                                  // waist
-    bd.ellipsoid(T([0, 0.07, 0.004]), TB, [0.3 * b, 0.16, 0.235 * b], top);                                     // waist-to-hip blend
-    bd.ellipsoid(T([0, 0.27, 0.004]), TB, [0.348 * b, 0.36, 0.228 * b], top);                                    // mid-torso: one smooth taper from chest to waist
-    bd.ellipsoid(T([0, 0.42 + breathe, 0.006]), TB, [0.38 * b, 0.4, 0.232 * b], top);                           // ribcage + chest in one smooth shape
-    for (const sx of [-1, 1]) bd.capsule(T([sx * 0.06 * b, 0.56, 0.01]), T([sx * 0.2 * b, 0.505, 0.006]), 0.068 * b, 0.064 * b, S.jacket || top);   // sloped shoulders
+    // a flat-fronted torso that tapers in steps from the chest to the waist (each step's edges are rounded off)
+    bd.tbox(T([0, 0.318 + breathe * 0.5, 0.0]), TB, [0.39 * b, 0.53, 0.193 * b], 0.085, [0.72, 0.93], top);      // one piece, chest to waist
+    for (const sx of [-1, 1]) bd.rbox(T([sx * 0.15 * b, 0.552, 0.004]), { R: TB.R.map((v, k) => v * 0.97 - sx * TB.U[k] * 0.24), U: TB.U.map((v, k) => v * 0.97 + sx * TB.R[k] * 0.24), B: TB.B }, [0.17 * b, 0.06, 0.15 * b], 0.028, S.jacket || top);   // shoulders slope down from the neck
 
     // ---- top layer styles
     if (!S.jacket && !(S.vest && vestSt === 'field' && topSt !== 'hoodie')) {
@@ -381,7 +384,7 @@ export class Contestant {
           bd.cyl(T([0, 0.47, -0.117 * b]), facing(TB.B.map((v) => -v), TB.U), [0.066, 0.066, 0.006], top);
           bd.rbox(T([0, 0.395, -0.115 * b]), TB, [0.13, 0.022, 0.008], 0.004, S.print, 0.1);
         }
-        bd.capsule(T([0, 0.08, 0]), T([0, 0.12, 0]), 0.145 * b, 0.145 * b, top);                                 // loose hem over the waistband
+        bd.rbox(T([0, 0.1, 0]), TB, [0.298 * b, 0.07, 0.196 * b], 0.03, top);                                    // loose hem over the waistband
       } else if (topSt === 'hoodie') {
         bd.ellipsoid(T([0, 0.6, 0.085]), TB, [0.27 * b, 0.15, 0.15], shade(top, 0.92));                         // hood bunched behind the neck
         bd.ellipsoid(T([0, 0.62, 0.11]), TB, [0.2 * b, 0.13, 0.1], shade(top, 0.8));                            // hood inner fold
@@ -390,9 +393,9 @@ export class Contestant {
           bd.capsule(T([sx * 0.035, 0.57, -0.1 * b]), T([sx * 0.045, 0.42, -0.125 * b]), 0.006, 0.006, S.accent || [0.95, 0.95, 0.95]);
           bd.capsule(T([sx * 0.045, 0.42, -0.125 * b]), T([sx * 0.046, 0.395, -0.126 * b]), 0.008, 0.008, [0.75, 0.75, 0.78]);
         }
-        bd.ellipsoid(T([0, 0.235, 0.0]), TB, [0.27 * b, 0.12, 0.292 * b], shade(top, 0.95));                      // kangaroo pocket (flush with the body)
+        bd.rbox(T([0, 0.235, 0.0]), TB, [0.25 * b, 0.11, 0.208 * b], 0.04, shade(top, 0.95));                     // kangaroo pocket (flush with the body)
         for (const sx of [-1, 1]) bd.capsule(T([sx * 0.105 * b, 0.285, -0.118 * b]), T([sx * 0.125 * b, 0.195, -0.112 * b]), 0.005, 0.005, shade(top, 0.7));   // pocket openings
-        bd.capsule(T([0, 0.07, 0]), T([0, 0.13, 0]), 0.15 * b, 0.15 * b, shade(top, 0.88));                     // ribbed hem
+        bd.rbox(T([0, 0.1, 0]), TB, [0.305 * b, 0.085, 0.2 * b], 0.035, shade(top, 0.88));                       // ribbed hem
       }
       if (S.logo) {   // chest emblem: a chevron on the left chest
         const lc = T([-0.085 * b, 0.5, -0.113 * b]);
@@ -414,9 +417,8 @@ export class Contestant {
         bd.capsule(T([0, 0.55, 0.01]), T([0, 0.65, 0.012]), 0.1 * b, 0.092 * b, jk);                            // high puffy collar
         bd.rbox(T([0, 0.34, -0.162 * b]), TB, [0.008, 0.44, 0.008], 0.003, shade(jk, 0.6));                      // zip
       } else {
-        bd.capsule(T([0, 0.12, 0.0]), T([0, 0.3, 0.0]), 0.142 * b, 0.155 * b, jk);                              // shell over the waist
-        bd.ellipsoid(T([0, 0.42 + breathe, 0.008]), TB, [0.4 * b, 0.42, 0.252 * b], jk);                        // shell over the chest
-        ring(0.11, 0.152 * b, 0.135 * b, 0.0, 0.022, rib, 18);                                                    // hem band
+        bd.tbox(T([0, 0.335 + breathe * 0.5, 0.0]), TB, [0.42 * b, 0.52, 0.2255 * b], 0.09, [0.78, 0.94], jk);   // the shell, chest to waist
+        bd.rbox(T([0, 0.095, 0.0]), TB, [0.335 * b, 0.05, 0.222 * b], 0.022, rib);                               // hem band
         if (jackSt === 'bomber') {
           ring(0.6, 0.085, 0.078, 0.01, 0.026, rib, 16, 0.04);                                                   // ribbed collar
           bd.rbox(T([0, 0.36, -0.128 * b]), TB, [0.01, 0.42, 0.008], 0.003, [0.7, 0.7, 0.72], 0);                // zip
@@ -447,8 +449,7 @@ export class Contestant {
       if (vestSt === 'waistcoat') {
         // fitted satin waistcoat: V opening, lapel edges, buttons, welt pockets
         withMat('paint', () => {
-          bd.ellipsoid(T([0, 0.42 + breathe, 0.006]), TB, [0.4 * b, 0.43, 0.25 * b], vs);
-          bd.capsule(T([0, 0.08, 0]), T([0, 0.3, 0]), 0.15 * b, 0.156 * b, vs);
+          bd.tbox(T([0, 0.32 + breathe * 0.5, 0.0]), TB, [0.402 * b, 0.53, 0.207 * b], 0.085, [0.76, 0.95], vs);
         });
         for (const sx of [-1, 1]) {                                                                              // the V shows the top underneath
           const VB = { R: TB.R, U: TB.U.map((v, n) => v + TB.R[n] * sx * 0.32), B: TB.B };
@@ -456,11 +457,11 @@ export class Contestant {
           bd.rbox(T([sx * 0.044, 0.53, chestFront(sx * 0.044, 0.53) - 0.008]), VB, [0.008, 0.16, 0.01], 0.003, shade(vs, 0.7));
         }
         withMat('brass', () => { for (let k = 0; k < 4; k++) bd.ellipsoid(T([0, 0.42 - k * 0.07, chestFront(0, 0.42 - k * 0.07) - 0.004]), TB, [0.018, 0.018, 0.012], [0.95, 0.92, 0.85]); });
-        for (const sx of [-1, 1]) bd.rbox(T([sx * 0.08 * b, 0.22, -0.153 * b]), TB, [0.07, 0.008, 0.008], 0.003, shade(vs, 0.65));
+        for (const sx of [-1, 1]) bd.rbox(T([sx * 0.08 * b, 0.22, -0.112 * b]), TB, [0.07, 0.008, 0.008], 0.003, shade(vs, 0.65));
       } else {
         // plate carrier: front + back plates, shoulder straps, cummerbund, magazine pouches, patch
-        bd.rbox(T([0, 0.38, -0.02]), TB, [0.42 * b, 0.33, 0.27 * b], 0.12, vs);
-        bd.capsule(T([0, 0.2, 0]), T([0, 0.26, 0]), 0.155 * b, 0.155 * b, shade(vs, 0.85));
+        bd.rbox(T([0, 0.38, -0.02]), TB, [0.42 * b, 0.33, 0.27 * b], 0.055, vs);
+        bd.rbox(T([0, 0.23, 0]), TB, [0.335 * b, 0.11, 0.225 * b], 0.04, shade(vs, 0.85));
         for (const sx of [-1, 1]) bd.rbox(T([sx * 0.11 * b, 0.575, 0.0]), TB, [0.075, 0.05, 0.26 * b], 0.022, vs);
         for (let k = -1; k <= 1; k++) {
           bd.rbox(T([k * 0.095 * b, 0.27, -0.155 * b]), TB, [0.08, 0.12, 0.05], 0.016, shade(vs, 0.8));

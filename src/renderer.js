@@ -882,7 +882,24 @@ export class Renderer {
     if (typeof shape === 'string') return (lo ? this.meshesLo[shape] : this.meshes[shape]) || this.cube;
     const q = (x) => Math.max(1, Math.round(Math.abs(x) * 500));      // 2 mm buckets
     let key, make;
-    if (typeof shape === 'object') {
+    if (typeof shape === 'object' && shape.taper) {
+      // { taper: [kx, kz], r }: a rounded box whose bottom is narrower than its top (x and z scaled by kx, kz there)
+      const [kx, kz] = shape.taper, r = shape.r || 0.02;
+      key = `t${q(scl[0])}_${q(scl[1])}_${q(scl[2])}_${q(r)}_${Math.round(kx * 50)}_${Math.round(kz * 50)}${lo ? 'l' : ''}`;
+      make = () => {
+        const D = [q(scl[0]) / 500, q(scl[1]) / 500, q(scl[2]) / 500];
+        const g = roundedBoxGeometry(D, q(r) / 500, lo ? 1 : 4), v = g.verts;
+        const tx = (1 - kx) * D[0] / 2 / D[1], tz = (1 - kz) * D[2] / 2 / D[1];      // how far the sides lean out per unit height
+        for (let i = 0; i < v.length; i += 6) {
+          const f = v[i + 1] + 0.5;
+          v[i] *= kx + (1 - kx) * f; v[i + 2] *= kz + (1 - kz) * f;
+          let nx = v[i + 3], ny = v[i + 4] - Math.abs(v[i + 3]) * tx - Math.abs(v[i + 5]) * tz, nz = v[i + 5];
+          const l = Math.hypot(nx, ny, nz) || 1;
+          v[i + 3] = nx / l; v[i + 4] = ny / l; v[i + 5] = nz / l;
+        }
+        return g;
+      };
+    } else if (typeof shape === 'object') {
       // { cap: [r1, r2] } with scl = [2rm, 2rm, L + 2rm]
       const [r1, r2] = shape.cap, rm = Math.max(r1, r2);
       const L = Math.max(0.002, scl[2] - 2 * rm);

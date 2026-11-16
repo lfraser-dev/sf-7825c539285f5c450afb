@@ -12,6 +12,7 @@ const BLACK = [0.08, 0.08, 0.09];
 const RED = [0.92, 0.1, 0.08], RED_HEAD = [1, 0.22, 0.16], RED_DARK = [0.55, 0.06, 0.05];
 const GUN = [0.1, 0.1, 0.11], GUN2 = [0.2, 0.2, 0.22];
 const FRAME = [0.11, 0.11, 0.125], JOINT = [0.26, 0.26, 0.28], SOLE = [0.06, 0.06, 0.07], GLOW = [1, 0.32, 0.18];
+const BOT_FX = [0.3, 0.6, 0];           // [energy, brightness, streak] for live-fabric armour
 const HAND = [0.11, 0.11, 0.126];       // hands: frame-coloured unless an outfit gives them gloves
 const TYPES = {
   rifle: { hp: 100, speed: 4.2, range: [11, 19], rpm: 560, burst: [3, 5], dmg: 6, acc: 1, pause: [0.7, 1.5], build: 1 },
@@ -327,7 +328,9 @@ export class Bot {
     const col = (c0) => { const c = (this.pal && this.pal.get(c0)) || c0; return fl ? c.map((v) => v + (1 - v) * fl) : c; };
     const em = fl ? 0.9 : 0.1, emD = fl ? 0.9 : 0;
     // whole-body fall when dying
-    const fa = dyingT >= 0 ? Math.min(1, dyingT / 0.6) ** 2 * 1.45 : 0, fs = this.fallSign;
+    // downed and being finished off: the body strains up off the floor (struggle 0..1) until the hit lands
+    const strain = !this.alive && this.downed && this.struggle ? this.struggle * 0.34 : 0;
+    const fa = dyingT >= 0 ? Math.min(1, dyingT / 0.6) ** 2 * 1.45 - strain : 0, fs = this.fallSign;
     // a takedown (or cutscene) pose: whole-body offset and pitch, crouch, hand and foot targets
     const P = this.pose || (this.tdAnim && this.alive ? takedownPose(this.tdAnim.kind, this.tdAnim.t) : null);
     // flips and slams turn the whole body; everything else leans from the hips with the feet planted
@@ -466,6 +469,11 @@ export class Bot {
       // pauldron
       const pd = heavy ? 1.3 : 1;
       box(up([side * 0.3 * b, 0.565, 0]), TB, [0.17 * b * pd, 0.11 * pd, 0.22 * pd], 0.05 * pd, RED_HEAD);
+    }
+    // a live-fabric outfit: the armour (in the outfit's main colour) is painted by the shader instead
+    if (this.fxTex && this.pal) {
+      const main = this.pal.get(RED);
+      for (const p of bd.out) if (p.color === main && p.emissive < 0.3) { p.tex = this.fxTex; p.color = BOT_FX; p.emissive = 0; }
     }
     this.gunMatrix = realGun;
     if (realGun && this.gunPartsOf) return bd.out.concat(this.gunPartsOf(this.gunDef, realGun));

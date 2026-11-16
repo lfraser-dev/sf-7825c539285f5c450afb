@@ -15,6 +15,7 @@ export const SLOTS = [
   { id: 'neck', name: 'NECK' },
   { id: 'body', name: 'SKIN TONE' },
   { id: 'wskin', name: 'WEAPON SKIN' },
+  { id: 'emote', name: 'VICTORY POSE' },
 ];
 
 export const RARITY = {
@@ -114,6 +115,21 @@ export const ITEMS = {
   w_desert: { slot: 'wskin', name: 'DESERT OPS', price: 1000, rarity: 'rare', gun: { main: C.tan, dark: [0.3, 0.25, 0.17] } },
   w_toxic: { slot: 'wskin', name: 'TOXIC', price: 1600, rarity: 'epic', gun: { main: C.lime, dark: [0.08, 0.1, 0.06], glow: true } },
   w_gold: { slot: 'wskin', name: '24 KARAT', price: 4000, rarity: 'legendary', gun: { main: [1, 0.78, 0.2], dark: [0.55, 0.38, 0.06], glow: true } },
+  // ---- victory poses: what you do on the results screen when you win
+  e_pump: { slot: 'emote', name: 'FIST PUMP', price: 0, rarity: 'common', apply: { emote: 'victoryPump' }, sw: [0.9, 0.9, 0.9], fx: 'Punch the air.' },
+  e_salute: { slot: 'emote', name: 'SALUTE', price: 600, rarity: 'common', apply: { emote: 'victorySalute' }, sw: [0.35, 0.45, 0.3], fx: 'A crisp salute to the crowd.' },
+  e_flex: { slot: 'emote', name: 'FLEX', price: 900, rarity: 'rare', apply: { emote: 'victoryFlex' }, sw: [1, 0.5, 0.15], fx: 'Both arms up, show them off.' },
+  e_guns: { slot: 'emote', name: 'FINGER GUNS', price: 1400, rarity: 'rare', apply: { emote: 'victoryGuns' }, sw: [0.3, 0.6, 1], fx: 'Pew pew at the camera.' },
+  e_stare: { slot: 'emote', name: 'COLD STARE', price: 1800, rarity: 'epic', apply: { emote: 'victoryStare' }, sw: [0.5, 0.2, 0.8], fx: 'Arms crossed. Not impressed.' },
+  e_dance: { slot: 'emote', name: 'SIDE STEP', price: 2500, rarity: 'epic', apply: { emote: 'victoryDance' }, sw: [1, 0.8, 0.2], fx: 'A little dance, side to side.' },
+  // ---- live fabrics: clothes painted by the shader, like the live gun skins (they move)
+  t_fx_holo: { slot: 'top', name: 'HOLO TEE', price: 2600, rarity: 'epic', apply: { top: [0.7, 0.5, 1.0], topStyle: 'tee', logo: null, print: null, fxTop: 46 }, fx: 'An oil-slick rainbow that slides as the camera moves.', live: true },
+  t_fx_circuit: { slot: 'top', name: 'LIVE WIRE HOODIE', price: 3600, rarity: 'legendary', apply: { top: [0.1, 0.8, 0.72], topStyle: 'hoodie', logo: null, fxTop: 47 }, fx: 'Light pulses run along circuit traces all over it.', live: true },
+  o_fx_storm: { slot: 'outer', name: 'STORMCELL PUFFER', price: 3200, rarity: 'epic', apply: { jacket: [0.3, 0.42, 0.8], jacketStyle: 'puffer', vest: null, fxJacket: 49 }, fx: 'Lightning crawls across the jacket.', live: true },
+  o_fx_molten: { slot: 'outer', name: 'MAGMA CORE BOMBER', price: 4200, rarity: 'legendary', apply: { jacket: [0.9, 0.3, 0.06], jacketStyle: 'bomber', trim: [0.05, 0.04, 0.04], vest: null, fxJacket: 44 }, fx: 'Black rock with glowing cracks that drift and pulse.', live: true },
+  o_fx_matter: { slot: 'outer', name: 'DARK MATTER BOMBER', price: 4800, rarity: 'legendary', apply: { jacket: [0.42, 0.1, 0.82], jacketStyle: 'bomber', trim: [0.1, 0.45, 1], vest: null, fxJacket: 45 }, fx: 'Swirling purple space with twinkling stars.', live: true },
+  l_fx_frost: { slot: 'legs', name: 'FROSTBITE PANTS', price: 2400, rarity: 'epic', apply: { bottom: [0.72, 0.86, 1.0], legStyle: 'chino', fxBottom: 48 }, fx: 'Ice crystals that glitter as you move.', live: true },
+  l_fx_molten: { slot: 'legs', name: 'LAVA TRACKIES', price: 3000, rarity: 'legendary', apply: { bottom: [0.85, 0.28, 0.05], legStyle: 'track', stripe: [1, 0.8, 0.3], fxBottom: 44 }, fx: 'Glowing cracks run down both legs.', live: true },
   // ---- live skins: patterns painted by the shader, and they react to how you play (see `fx` for what they do)
   w_digital: { slot: 'wskin', name: 'DIGITAL', price: 900, rarity: 'common', gun: { tex: 40, sw: [0.22, 0.32, 0.46] }, fx: 'Pixel camo in three blues.' },
   w_tiger: { slot: 'wskin', name: 'TIGER', price: 1200, rarity: 'rare', gun: { tex: 41, sw: [1, 0.45, 0.06] }, fx: 'Bold orange-and-black stripes.' },
@@ -137,6 +153,7 @@ export const iconFor = (slot) => ICON[slot] || '■';
 
 // swatch colour for an item card
 export function swatch(item) {
+  if (item.sw) return item.sw;
   if (item.gun) return item.gun.sw || item.gun.main;
   const a = item.apply || {};
   return a.headCol || a.top || a.jacket || a.vest || a.bottom || a.shoes || a.gloves || a.scarf || a.skin || a.hair || null;

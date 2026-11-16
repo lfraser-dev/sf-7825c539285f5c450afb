@@ -111,14 +111,40 @@ const ANIMS = {
   },
 };
 
+// After the hit every finisher ends on a flourish held for FLOURISH seconds: flick the blade clean, sling the hammer
+// onto a shoulder, pump a fist... [left hand, right hand] targets; `wave` adds a little motion.
+export const FLOURISH = 0.7;
+const FLOURISHES = {
+  knife: { L: [-0.2, 1.05, -0.2], R: [0.5, 0.95, -0.12], wave: [0.0, 0.07, 9] },          // flick it clean, out to the side
+  hammer: { L: [0.1, 1.2, -0.12], R: [0.22, 1.5, 0.08] },                                // up onto the shoulder
+  rifle: { L: [0.02, 1.0, -0.22], R: [0.2, 1.42, -0.02] },                               // rifle back across the chest
+  orb: { L: [-0.2, 1.05, -0.2], R: [0.3, 1.62, -0.12], wave: [0.0, 0.03, 14] },           // crackling fist in the air
+  nade: { L: [-0.07, 1.14, -0.32], R: [0.07, 1.14, -0.32], wave: [0.05, 0.0, 16] },       // dust the hands off
+  none: { L: [-0.22, 1.08, -0.18], R: [0.3, 1.78, -0.08], wave: [0.0, 0.05, 11] },        // fist pump
+  flex: { L: [-0.42, 1.62, 0.0], R: [0.42, 1.62, 0.0], wave: [0.0, 0.03, 10] },           // both arms up
+};
+const FLOURISH_OF = { blade: 'knife', sledge: 'hammer', buttstroke: 'rifle', shockpalm: 'orb', pocketnade: 'nade', stomp: 'flex', bodyslam: 'flex' };
+for (const a of Object.values(ANIMS)) a.end = a.off[a.off.length - 1][0];
+
 // the pose for a takedown at time t (seconds)
 export function takedownPose(kind, t) {
   const a = ANIMS[kind];
   if (!a) return null;
-  return {
+  const P = {
     off: kf(a.off, t), rot: kf(a.rot, t), crouch: kf(a.crouch, t),
     hands: [kf(a.L, t), kf(a.R, t)], footR: a.footR ? kf(a.footR, t) : null, spin: !!a.spin,
   };
+  if (t > a.end) {
+    // stand tall and hold the flourish
+    const F = FLOURISHES[FLOURISH_OF[kind] || 'none'];
+    let k = Math.min(1, (t - a.end) / 0.22); k = k * k * (3 - 2 * k);
+    const w = F.wave ? Math.sin((t - a.end) * F.wave[2]) * Math.max(0, 1 - (t - a.end) / FLOURISH) : 0;
+    const mixv = (x, y) => x.map((v, i) => v + (y[i] - v) * k);
+    P.hands = [mixv(P.hands[0], [F.L[0] - (F.wave ? F.wave[0] * w : 0), F.L[1], F.L[2]]), mixv(P.hands[1], [F.R[0] + (F.wave ? F.wave[0] * w : 0), F.R[1] + (F.wave ? F.wave[1] * w : 0), F.R[2]])];
+    P.crouch *= 1 - k; P.rot = P.spin ? P.rot : P.rot * (1 - k) - 0.06 * k;
+    P.footR = null;
+  }
+  return P;
 }
 
 // props in the attacker's hands, swing trails and sparks (needs bot.armW from the bot's last parts() call).

@@ -355,7 +355,7 @@ function cleanMe(m) {
   const lv = Math.max(1, Math.min(50, Math.floor(+m.lv || 1)));
   const col = (c) => (Array.isArray(c) && c.length === 3 && c.every((v) => Number.isFinite(v)) ? c.map((v) => Math.max(0, Math.min(1, v))) : null);
   const L = m.look && typeof m.look === 'object' ? m.look : null;
-  const look = L ? { m: col(L.m), h: col(L.h), b: col(L.b), s: col(L.s), g: col(L.g), w: String(L.w || '').slice(0, 16), sk: String(L.sk || '').slice(0, 24), a: L.a && typeof L.a === 'object' ? L.a : {} } : null;
+  const look = L ? { m: col(L.m), h: col(L.h), b: col(L.b), s: col(L.s), g: col(L.g), w: String(L.w || '').slice(0, 16), sk: String(L.sk || '').slice(0, 24), a: L.a && typeof L.a === 'object' ? L.a : {}, fx: L.fx >= 40 && L.fx <= 52 ? Math.floor(L.fx) : 0 } : null;
   return { lv, look };
 }
 class Remote {
@@ -371,7 +371,7 @@ class Remote {
     b.name = this.name; b.pal = teamPalette(this.team.rgb); b.team = this.team.idx;
     // their outfit and their actual gun (with its skin)
     if (this.look) {
-      try { b.pal = lookPalette(this.look, this.team.rgb); } catch { /* keep the team colours */ }
+      try { b.pal = lookPalette(this.look, this.team.rgb); b.fxTex = this.look.fx || 0; } catch { /* keep the team colours */ }
       const d = this.g?.gunDefFor?.(this.look);
       if (d) { b.gunDef = d; b.gunPartsOf = this.g.gunPartsOf; }
     }

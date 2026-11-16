@@ -274,7 +274,20 @@
   #menu[data-screen="home"] { background: linear-gradient(0deg, rgba(8,8,10,.85) 0, rgba(8,8,10,0) 45%), linear-gradient(90deg, rgba(8,8,10,.55) 0, rgba(8,8,10,0) 30%); }
   .mm-home { position: absolute; inset: 70px 0 0 0; padding: 0; }
   .mm-home-left { position: absolute; left: 32px; bottom: 34px; width: min(440px, calc(100% - 64px)); }
-  .mm-home .mm-sum { position: absolute; right: 32px; bottom: 34px; width: 340px; margin: 0; }
+  .mm-home-right { position: absolute; right: 32px; bottom: 34px; width: 340px; display: flex; flex-direction: column; gap: 12px; }
+  .mm-home .mm-sum, .mm-home .mm-daily { margin: 0; }
+  .mm-daily h5 { margin: 0 0 8px; display: flex; justify-content: space-between; font: 800 12px var(--font); letter-spacing: .2em; }
+  .mm-daily h5 span { opacity: .55; font-weight: 700; }
+  .dc { position: relative; padding: 7px 0 9px; border-top: 1px solid rgba(255,255,255,.08); }
+  .dc b { display: block; font: 700 13px var(--font); letter-spacing: .04em; }
+  .dc small { font: 700 10px var(--font); letter-spacing: .12em; color: #ffd04a; }
+  .dc em { position: absolute; right: 0; top: 7px; font: 800 italic 13px var(--font); opacity: .8; }
+  .dc i { display: block; height: 3px; margin-top: 5px; background: rgba(255,255,255,.12); position: relative; }
+  .dc i::after { content: ''; position: absolute; inset: 0; width: calc(var(--p) * 100%); background: #ffb21a; }
+  .dc.done b { opacity: .55; text-decoration: line-through; }
+  .dc.done em { color: #49ff7a; opacity: 1; }
+  .dc.done i::after { background: #49ff7a; }
+  .me-dc { margin: 6px 0 0; font-size: 12px; font-weight: 800; letter-spacing: .08em; color: #49ff7a; text-align: left; }
   #menu[data-screen="home"] .mm-name { display: none; }
   .mm-small .mm-class { padding: 8px 10px; }
   .mm-small .mm-class b { font-size: 20px; }
@@ -322,7 +335,7 @@
   .sh-buy button.no { background: rgba(255,255,255,.12); color: rgba(255,255,255,.5); cursor: not-allowed; }
   .sh-buy button.own { background: rgba(255,255,255,.12); color: #fff; }
   .sh-buy p { margin: 8px 0 0; font: 600 13px var(--font); opacity: .7; }
-  @media (max-width: 760px) { .mm-home { position: static; padding: 20px 16px; } .mm-home-left, .mm-home .mm-sum { position: static; width: auto; margin-top: 12px; } .sh-buy { position: static; width: auto; margin: 16px; } .mm-nav button { font-size: 15px; padding: 6px 8px; } }
+  @media (max-width: 760px) { .mm-home { position: static; padding: 20px 16px; } .mm-home-left, .mm-home-right { position: static; width: auto; margin-top: 12px; } .sh-buy { position: static; width: auto; margin: 16px; } .mm-nav button { font-size: 15px; padding: 6px 8px; } }
 
   /* ---------- main menu ---------- */
   #menu { position: fixed; inset: 0; display: block; padding: 0; background: linear-gradient(90deg, rgba(8,8,10,.86) 0, rgba(8,8,10,.6) 34%, rgba(8,8,10,0) 58%); color: #fff; overflow-y: auto; }
@@ -649,6 +662,12 @@ p.fx { color: #cfd3da; font-size: 12px; line-height: 1.4; margin: 6px 0 10px; }
 .me-xp > i::after { content: ''; position: absolute; inset: 0; width: calc(var(--p) * 100%); background: linear-gradient(90deg, #ff8a1a, #ffd04a); }
 .me-xp small { font-size: 11px; letter-spacing: .1em; opacity: .7; }
 .me-unl { margin: 6px 0 0; font-size: 12px; font-weight: 800; letter-spacing: .1em; color: #8fe8ff; }
+@media (max-width: 1400px) { .mm-rank b { display: none; } .mm-rank > div > i { min-width: 44px; margin-top: 0; } }
+/* results: on wide screens the card sits on the left so your character's victory pose shows on the right */
+@media (min-width: 1000px) {
+  #matchend { place-items: center start; padding-left: 5vw; background: linear-gradient(90deg, rgba(6,6,8,.95) 0%, rgba(6,6,8,.9) 40%, rgba(6,6,8,.3) 58%, rgba(6,6,8,0) 78%); }
+}
+body:has(#matchend:not(.hidden)) .mm-page { visibility: hidden; }
 </style>
 </head>
 <body>
@@ -763,7 +782,7 @@ p.fx { color: #cfd3da; font-size: 12px; line-height: 1.4; margin: 6px 0 10px; }
 
   <section class="mm-page mm-home" data-page="home">
     <div class="mm-col mm-home-left">
-      <div class="mm-kicker">SEASON 1 · BUILD 0.53</div>
+      <div class="mm-kicker">SEASON 1 · BUILD 0.54</div>
       <button class="mm-big" id="mm-play" type="button">
         <span class="mm-big-t">PLAY</span>
         <span class="mm-big-s" id="mm-play-sub">SEMI-FINALS · FIND A MATCH</span>
@@ -776,7 +795,10 @@ p.fx { color: #cfd3da; font-size: 12px; line-height: 1.4; margin: 6px 0 10px; }
       </button>
       <div id="locknote" class="hidden">Mouse lock isn't available here. For proper mouse look, open the game in its own browser tab.</div>
     </div>
-    <div class="mm-card mm-sum" id="mm-sum"></div>
+    <div class="mm-home-right">
+      <div class="mm-card mm-daily" id="mm-daily"></div>
+      <div class="mm-card mm-sum" id="mm-sum"></div>
+    </div>
   </section>
 
   <section class="mm-page hidden" data-page="armoury">
@@ -874,41 +896,42 @@ p.fx { color: #cfd3da; font-size: 12px; line-height: 1.4; margin: 6px 0 10px; }
 <script type="importmap">
 {
  "imports": {
-  "./src/attachments.js": "./src/attachments.js?v=0.53-1794741868",
-  "./src/audio.js": "./src/audio.js?v=0.53-1794741868",
-  "./src/batch.js": "./src/batch.js?v=0.53-1794741868",
-  "./src/bench.js": "./src/bench.js?v=0.53-1794741868",
-  "./src/bots.js": "./src/bots.js?v=0.53-1794741868",
-  "./src/classes.js": "./src/classes.js?v=0.53-1794741868",
-  "./src/contestant.js": "./src/contestant.js?v=0.53-1794741868",
-  "./src/cosmetics.js": "./src/cosmetics.js?v=0.53-1794741868",
-  "./src/course.js": "./src/course.js?v=0.53-1794741868",
-  "./src/effects.js": "./src/effects.js?v=0.53-1794741868",
-  "./src/elevator.js": "./src/elevator.js?v=0.53-1794741868",
-  "./src/gadgets.js": "./src/gadgets.js?v=0.53-1794741868",
-  "./src/heavy.js": "./src/heavy.js?v=0.53-1794741868",
-  "./src/input.js": "./src/input.js?v=0.53-1794741868",
-  "./src/main.js": "./src/main.js?v=0.53-1794741868",
-  "./src/maps/arenas.js": "./src/maps/arenas.js?v=0.53-1794741868",
-  "./src/maps/testRange.js": "./src/maps/testRange.js?v=0.53-1794741868",
-  "./src/matchmaking.js": "./src/matchmaking.js?v=0.53-1794741868",
-  "./src/math.js": "./src/math.js?v=0.53-1794741868",
-  "./src/nav.js": "./src/nav.js?v=0.53-1794741868",
-  "./src/net.js": "./src/net.js?v=0.53-1794741868",
-  "./src/player.js": "./src/player.js?v=0.53-1794741868",
-  "./src/progress.js": "./src/progress.js?v=0.53-1794741868",
-  "./src/props.js": "./src/props.js?v=0.53-1794741868",
-  "./src/renderer.js": "./src/renderer.js?v=0.53-1794741868",
-  "./src/rig.js": "./src/rig.js?v=0.53-1794741868",
-  "./src/takedown.js": "./src/takedown.js?v=0.53-1794741868",
-  "./src/tdm.js": "./src/tdm.js?v=0.53-1794741868",
-  "./src/thumbs.js": "./src/thumbs.js?v=0.53-1794741868",
-  "./src/weapon.js": "./src/weapon.js?v=0.53-1794741868",
-  "./src/weapons.js": "./src/weapons.js?v=0.53-1794741868",
-  "./src/world.js": "./src/world.js?v=0.53-1794741868"
+  "./src/attachments.js": "./src/attachments.js?v=0.54-1794827438",
+  "./src/audio.js": "./src/audio.js?v=0.54-1794827438",
+  "./src/batch.js": "./src/batch.js?v=0.54-1794827438",
+  "./src/bench.js": "./src/bench.js?v=0.54-1794827438",
+  "./src/bots.js": "./src/bots.js?v=0.54-1794827438",
+  "./src/challenges.js": "./src/challenges.js?v=0.54-1794827438",
+  "./src/classes.js": "./src/classes.js?v=0.54-1794827438",
+  "./src/contestant.js": "./src/contestant.js?v=0.54-1794827438",
+  "./src/cosmetics.js": "./src/cosmetics.js?v=0.54-1794827438",
+  "./src/course.js": "./src/course.js?v=0.54-1794827438",
+  "./src/effects.js": "./src/effects.js?v=0.54-1794827438",
+  "./src/elevator.js": "./src/elevator.js?v=0.54-1794827438",
+  "./src/gadgets.js": "./src/gadgets.js?v=0.54-1794827438",
+  "./src/heavy.js": "./src/heavy.js?v=0.54-1794827438",
+  "./src/input.js": "./src/input.js?v=0.54-1794827438",
+  "./src/main.js": "./src/main.js?v=0.54-1794827438",
+  "./src/maps/arenas.js": "./src/maps/arenas.js?v=0.54-1794827438",
+  "./src/maps/testRange.js": "./src/maps/testRange.js?v=0.54-1794827438",
+  "./src/matchmaking.js": "./src/matchmaking.js?v=0.54-1794827438",
+  "./src/math.js": "./src/math.js?v=0.54-1794827438",
+  "./src/nav.js": "./src/nav.js?v=0.54-1794827438",
+  "./src/net.js": "./src/net.js?v=0.54-1794827438",
+  "./src/player.js": "./src/player.js?v=0.54-1794827438",
+  "./src/progress.js": "./src/progress.js?v=0.54-1794827438",
+  "./src/props.js": "./src/props.js?v=0.54-1794827438",
+  "./src/renderer.js": "./src/renderer.js?v=0.54-1794827438",
+  "./src/rig.js": "./src/rig.js?v=0.54-1794827438",
+  "./src/takedown.js": "./src/takedown.js?v=0.54-1794827438",
+  "./src/tdm.js": "./src/tdm.js?v=0.54-1794827438",
+  "./src/thumbs.js": "./src/thumbs.js?v=0.54-1794827438",
+  "./src/weapon.js": "./src/weapon.js?v=0.54-1794827438",
+  "./src/weapons.js": "./src/weapons.js?v=0.54-1794827438",
+  "./src/world.js": "./src/world.js?v=0.54-1794827438"
  }
 }
 </script>
-<script type="module" src="src/main.js?v=0.53-1794741868"></script>
+<script type="module" src="src/main.js?v=0.54-1794827438"></script>
 </body>
 </html>

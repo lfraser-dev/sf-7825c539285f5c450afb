@@ -135,6 +135,58 @@ export const POSES = {
     p.breath = t;
     return p;
   },
+  // ---- victory poses (the results screen, and previews in Customization) and the losing slump
+  victoryPump(t) {
+    const k = Math.abs(Math.sin(t * 4.2)), p = { pelvis: [0, 0.95 + k * 0.025, 0], lean: -0.06, twist: 0.12, head: [0.05, -0.12 - k * 0.05] };
+    standLegs(p, 0.2, 0.05);
+    p.hands = [[-0.25, 0.98, 0.05], [0.26, 1.5 + k * 0.3, -0.12]];
+    p.elbowOut = 1.1; p.mouth = 0.5; p.breath = t;
+    return p;
+  },
+  victorySalute(t) {
+    const p = { pelvis: [0, 0.96, 0], lean: -0.03, twist: 0, head: [0, -0.04] };
+    standLegs(p, 0.1, 0);
+    p.hands = [[-0.21, 0.9, 0.02], [0.17, 1.63 + Math.sin(t * 1.5) * 0.004, -0.15]];
+    p.elbowOut = 1.5; p.breath = t;
+    return p;
+  },
+  victoryFlex(t) {
+    const k = Math.sin(t * 2.6), p = { pelvis: [k * 0.02, 0.95, 0], lean: -0.08, twist: k * 0.2, head: [k * 0.25, -0.06] };
+    standLegs(p, 0.24, 0);
+    p.hands = [[-0.33, 1.56 + Math.max(0, k) * 0.05, -0.02], [0.33, 1.56 + Math.max(0, -k) * 0.05, -0.02]];
+    p.elbowOut = 1.6; p.mouth = 0.4; p.breath = t;
+    return p;
+  },
+  victoryGuns(t) {
+    const a = Math.sin(t * 5), kL = Math.max(0, a) ** 4, kR = Math.max(0, -a) ** 4;
+    const p = { pelvis: [0, 0.95, 0], lean: 0.05, twist: a * 0.06, head: [0, 0.02] };
+    standLegs(p, 0.2, 0.08);
+    p.hands = [[-0.2, 1.38 + kL * 0.1, -0.58 + kL * 0.12], [0.2, 1.38 + kR * 0.1, -0.58 + kR * 0.12]];
+    p.mouth = 0.3; p.breath = t;
+    return p;
+  },
+  victoryDance(t) {
+    const a = Math.sin(t * 4.6), b2 = Math.abs(Math.sin(t * 4.6));
+    const p = { pelvis: [a * 0.09, 0.93 + b2 * 0.035, 0], lean: -0.04, twist: a * 0.28, head: [a * 0.2, -0.05] };
+    p.feet = [[-0.17 + a * 0.03, 0.05 + Math.max(0, a) * 0.13, 0.02], [0.17 + a * 0.03, 0.05 + Math.max(0, -a) * 0.13, -0.02]];
+    p.hands = [[-0.32, 1.3 + a * 0.26, -0.22], [0.32, 1.3 - a * 0.26, -0.22]];
+    p.elbowOut = 1.2; p.mouth = 0.5; p.breath = t;
+    return p;
+  },
+  victoryStare(t) {
+    const p = { pelvis: [0, 0.95, 0], lean: -0.06, twist: 0.08, head: [0, 0.06 + Math.sin(t * 0.9) * 0.03] };
+    standLegs(p, 0.22, 0);
+    p.hands = [[0.16, 1.2, -0.18], [-0.16, 1.18, -0.2]];
+    p.elbowOut = 1.4; p.breath = t;
+    return p;
+  },
+  defeat(t) {
+    const s = Math.sin(t * 0.9), p = { pelvis: [s * 0.01, 0.93, 0.02], lean: 0.2, twist: 0, head: [s * 0.05, 0.42] };
+    standLegs(p, 0.13, 0);
+    p.hands = [[-0.2, 0.84, -0.02], [0.2, 0.84, -0.02]];
+    p.breath = t * 0.6;
+    return p;
+  },
   heroHip(t) {
     const p = { pelvis: [0.04, 0.95, 0], lean: -0.02, twist: 0.3, head: [-0.25, -0.02] };
     standLegs(p, 0.21, -0.06);
@@ -170,7 +222,10 @@ export class Contestant {
     const cy = Math.cos(this.yaw), sy = Math.sin(this.yaw);
     const Wd = (v) => [cy * v[0] + sy * v[2], v[1], -sy * v[0] + cy * v[2]];
     const W = (v) => { const d = Wd(v); return [this.pos[0] + d[0], this.pos[1] + d[1], this.pos[2] + d[2]]; };
-    const shade = (c, k) => c.map((v) => Math.min(1, v * k));
+    // live fabrics (see the end): remember which colours belong to them, including shaded variants
+    const fxMap = new Map();
+    for (const [c, k] of [[S.jacket, S.fxJacket], [S.top, S.fxTop], [S.bottom, S.fxBottom]]) if (c && k && !fxMap.has(c)) fxMap.set(c, [k, 0.6]);
+    const shade = (c, k) => { const r = c.map((v) => Math.min(1, v * k)); const f = fxMap.get(c); if (f) fxMap.set(r, [f[0], Math.min(1, f[1] * k)]); return r; };
     const breathe = P.breath != null ? Math.sin(P.breath * 2) * 0.008 : 0;
     const pelvis = P.pelvis;
     const lean = P.lean || 0, tw = P.twist || 0;
@@ -616,6 +671,16 @@ export class Contestant {
       }
     });
 
+    // ---- live fabrics: a jacket, top or trousers painted by the shader (same patterns as the live gun skins).
+    // The part's colour then carries [energy, brightness, 0] instead of a colour.
+    if (fxMap.size) {
+      const e = 0.3 + 0.25 * Math.sin(this.t * 1.3);
+      for (const p of bd.out) {
+        const f = !p.emissive && fxMap.get(p.color);
+        if (f) { p.tex = f[0]; p.color = [e, f[1], 0]; }
+      }
+    }
+    this.hasGun = !!P.gun;
     // ---- weapon: either a real gun model (gunMatrix, drawn by the caller) or a simple prop
     if (P.gun && this.realGun) {
       const g = P.gun;

@@ -57,7 +57,22 @@ os.makedirs(os.path.join(root, 'site'), exist_ok=True)
 open(os.path.join(root, 'site', 'g.bin'), 'wb').write(iv + AESGCM(k_bundle).encrypt(iv, payload, None))
 
 gate = open(os.path.join(root, 'tools', 'gate.html'), encoding='utf-8').read()
-gate = gate.replace('%SALT%', cfg['salt']).replace('%ITER%', str(cfg['iter'])).replace('%VER%', ver)
-open(os.path.join(root, 'site', 'index.html'), 'w', encoding='utf-8').write(gate)
-open(os.path.join(root, 'site', 'robots.txt'), 'w').write('User-agent: *\nDisallow: /\n')
+# the secret word that reveals the password screen (from SF_WORD or .sealword, also git-ignored): only its hash goes in
+word = os.environ.get('SF_WORD')
+if not word and os.path.exists(os.path.join(root, '.sealword')):
+    word = open(os.path.join(root, '.sealword')).read()
+word = re.sub(r'\s+', '', (word or '').strip().lower())
+if not word:
+    sys.exit('seal: no secret word (set SF_WORD or write it to .sealword)')
+word_h = hashlib.sha256(('sf-word:' + word).encode()).hexdigest()
+gate = gate.replace('%SALT%', cfg['salt']).replace('%ITER%', str(cfg['iter'])).replace('%VER%', ver).replace('%WORDH%', word_h).replace('%WORDL%', str(len(word)))
+# published twice: site/ (Cloudflare) and docs/ (GitHub Pages, set to serve the docs folder)
+for out in ('site', 'docs'):
+    os.makedirs(os.path.join(root, out), exist_ok=True)
+    if out != 'site':
+        open(os.path.join(root, out, 'g.bin'), 'wb').write(open(os.path.join(root, 'site', 'g.bin'), 'rb').read())
+    open(os.path.join(root, out, 'index.html'), 'w', encoding='utf-8').write(gate)
+    open(os.path.join(root, out, 'robots.txt'), 'w').write('User-agent: *\nDisallow: /\n')
+    open(os.path.join(root, out, '404.html'), 'w', encoding='utf-8').write(gate)      # any other address shows the same "404"
+    open(os.path.join(root, out, '.nojekyll'), 'w').write('')
 print('sealed', ver, len(mods), 'modules,', os.path.getsize(os.path.join(root, 'site', 'g.bin')) // 1024, 'KB')

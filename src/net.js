@@ -23,7 +23,13 @@ const PEERJS = 'https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js';
 // it, and all relay traffic is encrypted with it, so nobody without the password can find, read or join a game.
 const NET = window.__sfNet || null;
 const PREFIX = 'semifinals-room-' + (NET ? NET.tag + '-' : '');
-const SEND_HZ = 15;     // position updates per second (through the relay server)
+const SEND_HZ = 20;     // position updates per second (through the relay server)
+// Other players are drawn a little in the past (INTERP_DELAY), smoothly in between the two updates either side of
+// that moment, using the sender's own clock stamped on each update. The relay delivers updates in uneven clumps;
+// chasing the newest one made people stutter (dash, stop, dash). If updates stop coming, they keep moving the way
+// they were going for a moment (EXTRAP_MAX) rather than freezing.
+const INTERP_DELAY = 140, EXTRAP_MAX = 250;
+const nowMs = () => performance.now();
 const TYPE_OF = { light: 'rusher', medium: 'rifle', heavy: 'heavy' };
 const COLS = ['#ff7a1a', '#2f8cff'];
 const hex = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16) / 255);
@@ -381,6 +387,7 @@ class Remote {
     b.remote = this; b.agent = this;
     b.place();
     this.bot = b; this.dead = false;
+    this.snaps = [];
   }
   get pos() { return this.bot ? this.bot.pos : [0, -999, 0]; }
   get alive() { return !!this.bot && this.bot.alive && !this.dead; }
@@ -394,6 +401,38 @@ class Remote {
     if (s.d) return;
     if (!this.bot || this.dead || this.bot.removed) { this.spawn(s.p, s.y); }
     this.target = s;
+    // keep a short history of updates, timed by the sender's clock
+    const now = nowMs(), ts = s.ts ?? now;
+    const lag = now - ts;                     // their clock to ours, plus the trip: track the quickest trip seen
+    if (this.off == null || lag < this.off) this.off = lag;
+    else this.off += (lag - this.off) * 0.004;   // let it drift up slowly if the clocks wander
+    const snaps = (this.snaps ||= []);
+    if (snaps.length && ts <= snaps[snaps.length - 1].ts) return;      // late or repeated: already past it
+    snaps.push({ ts, p: [...s.p], y: s.y, pi: s.pi || 0 });
+    if (snaps.length > 40) snaps.shift();
+  }
+  // where they were at the render moment: in between two updates, or a little past the newest one
+  sample() {
+    const snaps = this.snaps;
+    if (!snaps || !snaps.length) return null;
+    const t = nowMs() - (this.off || 0) - INTERP_DELAY;
+    const last = snaps[snaps.length - 1];
+    if (t <= snaps[0].ts) return snaps[0];
+    if (t >= last.ts) {
+      const prev = snaps[snaps.length - 2];
+      if (!prev) return last;
+      const dtp = last.ts - prev.ts, k = Math.min(t - last.ts, EXTRAP_MAX) / Math.max(dtp, 1);
+      if (Math.hypot(last.p[0] - prev.p[0], last.p[2] - prev.p[2]) > 6) return last;
+      return { p: last.p.map((v, i) => v + (v - prev.p[i]) * k), y: last.y, pi: last.pi };
+    }
+    let i = snaps.length - 2;
+    while (i > 0 && snaps[i].ts > t) i--;
+    const a = snaps[i], b = snaps[i + 1], k = (t - a.ts) / Math.max(b.ts - a.ts, 1);
+    if (Math.hypot(b.p[0] - a.p[0], b.p[2] - a.p[2]) > 6) return k < 0.5 ? a : b;    // a teleport (respawn, lift): no sliding
+    let dy = b.y - a.y;
+    while (dy > Math.PI) dy -= Math.PI * 2;
+    while (dy < -Math.PI) dy += Math.PI * 2;
+    return { p: a.p.map((v, j) => v + (b.p[j] - v) * k), y: a.y + dy * k, pi: a.pi + (b.pi - a.pi) * k };
   }
   update(dt, g) {
     const b = this.bot;
@@ -408,16 +447,13 @@ class Remote {
       return;
     }
     if (b.tdAnim) { b.tdAnim.t += dt; if (b.tdAnim.t >= b.tdAnim.def.dur) b.tdAnim = null; }
-    const t = this.target;
+    const t = this.sample();
     if (t) {
-      const d = Math.hypot(t.p[0] - b.pos[0], t.p[1] - b.pos[1], t.p[2] - b.pos[2]);
-      const k = d > 5 ? 1 : Math.min(1, dt * 14);
+      // ease onto the sample (hides the small jump when a late update corrects a guess), snap if it's far
+      const far = Math.hypot(t.p[0] - b.pos[0], t.p[2] - b.pos[2]) > 4, k = far ? 1 : Math.min(1, dt * 30);
       for (let i = 0; i < 3; i++) b.pos[i] += (t.p[i] - b.pos[i]) * k;
-      let dy = t.y - b.yaw;
-      while (dy > Math.PI) dy -= Math.PI * 2;
-      while (dy < -Math.PI) dy += Math.PI * 2;
-      b.yaw += dy * Math.min(1, dt * 16);
-      b.aimPitch += (t.pi - b.aimPitch) * Math.min(1, dt * 16);
+      b.yaw = t.y;
+      b.aimPitch = t.pi;
     }
     // animation bookkeeping (as the AI agents do)
     b.flash -= dt; b.muzzleT -= dt;
@@ -750,10 +786,10 @@ export class Online {
       for (const a of this.agents) {
         if (!a.isAI) continue;
         const b = a.bot;
-        this.send({ t: 'st', id: a.id, p: b.pos.map((v) => +v.toFixed(3)), y: +b.yaw.toFixed(3), pi: +(b.aimPitch || 0).toFixed(3), hp: Math.max(0, Math.round(b.hp)), mh: b.maxHp, d: b.alive ? 0 : 1, w: ({ light: 'smg', medium: 'ar', heavy: 'lmg' })[a.cls] });
+        this.send({ t: 'st', ts: Math.round(nowMs()), id: a.id, p: b.pos.map((v) => +v.toFixed(3)), y: +b.yaw.toFixed(3), pi: +(b.aimPitch || 0).toFixed(3), hp: Math.max(0, Math.round(b.hp)), mh: b.maxHp, d: b.alive ? 0 : 1, w: ({ light: 'smg', medium: 'ar', heavy: 'lmg' })[a.cls] });
       }
       const p = g.player;
-      this.send({ t: 'st', id: this.myId, p: p.pos.map((v) => +v.toFixed(3)), y: +p.yaw.toFixed(3), pi: +(p.pitch || 0).toFixed(3), hp: Math.max(0, Math.round(p.hp)), mh: p.maxHp, d: p.dead ? 1 : 0, w: g.weaponId?.(), gr: g.grapplePoint?.() || undefined, cl: g.cloaked?.() ? 1 : undefined });
+      this.send({ t: 'st', ts: Math.round(nowMs()), id: this.myId, p: p.pos.map((v) => +v.toFixed(3)), y: +p.yaw.toFixed(3), pi: +(p.pitch || 0).toFixed(3), hp: Math.max(0, Math.round(p.hp)), mh: p.maxHp, d: p.dead ? 1 : 0, w: g.weaponId?.(), gr: g.grapplePoint?.() || undefined, cl: g.cloaked?.() ? 1 : undefined });
     }
   }
 

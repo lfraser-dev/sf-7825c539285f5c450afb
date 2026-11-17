@@ -126,7 +126,8 @@
     if (!pw.disabled) pw.focus();
   });
 
-  // remembered device: try the saved key first
+  // remembered device: try the saved key first (add ?lock to the address to make this device forget it)
+  if (/[?&]lock\b/.test(location.search)) { store.del('sf.key'); history.replaceState(null, '', location.pathname); }
   (async () => {
     const saved = store.get('sf.key');
     if (saved) {

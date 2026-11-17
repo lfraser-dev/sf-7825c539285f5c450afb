@@ -46,13 +46,9 @@ export const GUN_LV = {
   autoshotgun: 2, rk74: 6, amr: 9, minigun: 12, bruiser: 18,
   // sidearms
   mp: 3, hc50: 9, bx9: 15,
-  // variants (build 0.57): each a few levels after the gun it's built on
-  ar_sd: 4, ar_hb: 7, burst_r: 6, hx17_c: 12, cr56_x: 19, dmr_h: 9, bullpup_s: 10,
-  smg_r: 5, kv_x: 8, kr45_s: 13, pdx_a: 17, zu9_h: 11,
-  shotgun_l: 6, auto_s: 8, double_s: 14, rt7_t: 16,
-  sniper_l: 10, rg1_c: 28, lever_b: 12, amr_d: 15,
-  lmg_s: 5, rk74_d: 11, bruiser_ap: 22, minigun_t: 17,
-  pistol_m: 4, revolver_s: 6, hc50_l: 13, bx9_d: 18, mp_r: 7,
+  // variants (build 0.63): each a few levels after the gun it's built on
+  ar_sd: 4, burst_a: 7, dmr_i: 9, smg_r: 5, kv_d: 8, double_s: 14, shotgun_d: 6,
+  sniper_x: 10, rg1_c: 28, lmg_s: 5, pistol_a: 4, revolver_h: 8,
 };
 export const TD_LV = { flipkick: 6, shockpalm: 12, pocketnade: 6, elbowdrop: 12, sledge: 6, bodyslam: 12 };
 export const SKIN_LV = { w_circuit: 8, w_molten: 12, w_bloodline: 16, w_darkmatter: 20, w_diamond: 30, w_aurum: 40, w_gold: 25 };

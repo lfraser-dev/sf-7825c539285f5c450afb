@@ -336,129 +336,122 @@ export class Workbench {
   }
 }
 
-// ---------------------------------------------------------------- gun crates
-// Military weapon crates either side of the workbench: olive-drab wooden crates with steel corners, rope handles,
-// stencilled markings and the lid propped open behind, every gun jammed in muzzle-first. Round them: stacked ammo
-// cans (one open, full of rounds), loose mags, shell boxes and a belt of rounds. Look at a gun and press E to take
-// it; look at an ammo can and press E to fill up both guns.
-const OD = [0.29, 0.33, 0.2], OD_D = [0.2, 0.23, 0.14], STEELD = [0.17, 0.17, 0.18], STEN = [0.92, 0.8, 0.3], STENW = [0.88, 0.88, 0.84];
-const ROPE = [0.55, 0.47, 0.32], BRASSC = [0.8, 0.62, 0.28], TIP = [0.5, 0.3, 0.18];
-export function gunCrates(world, defs, benchPos) {
-  const add = (min, max, o) => world.add(makeBox(min, max, { grid: false, ...o }));
-  const at = (x, y, z, sx, sy, sz, o) => add([x - sx / 2, y, z - sz / 2], [x + sx / 2, y + sy, z + sz / 2], o);
-  const deco = (min, max, o) => add(min, max, { solid: false, noShadow: true, ...o });
-  const [bx, by, bz] = benchPos;
-  const D = 1.25, Hh = 0.62, t = 0.05;
-  // two big crates of primaries either side of the bench, a small one of sidearms at the far right; then the
-  // variants: two more big crates further left, and a small one of sidearm variants further right
-  const groups = Array.isArray(defs[0]) ? defs : [defs.slice(0, Math.ceil(defs.length / 2)), defs.slice(Math.ceil(defs.length / 2))];
-  const crates = [[bx - 3.65, bz + 0.62, 3.1], [bx + 3.65, bz + 0.62, 3.1], [bx + 7.0, bz + 0.62, 1.9],
-    [bx - 10.4, bz + 0.62, 3.1], [bx - 14.0, bz + 0.62, 3.1], [bx + 9.6, bz + 0.62, 1.9]].slice(0, groups.length);
-  const items = [];
-  // stencil "text": a row of short bars of varying width, like letters at a distance
-  const stencil = (x0, y0, z, w, h, seed, col = STEN, face = -1) => {
-    let x = x0, k = seed;
-    while (x < x0 + w - 0.02) {
-      k = (k * 9301 + 49297) % 233280;
-      const lw = 0.025 + (k / 233280) * 0.035;
-      if (x + lw > x0 + w) break;
-      deco([x, y0, z - 0.004 * (face < 0 ? 1 : 0)], [x + lw, y0 + h, z + 0.004 * (face > 0 ? 1 : 0)], { color: col, emissive: 0.08 });
-      x += lw + 0.012;
-    }
-  };
-  // a steel ammo can: body, lid with a handle, latch, yellow stencil band
-  const ammoCan = (x, y, z, open = false, rotY = 0) => {
-    const sx = rotY ? 0.16 : 0.3, sz = rotY ? 0.3 : 0.16;
-    at(x, y, z, sx, 0.19, sz, { color: OD, mat: 'paint' });
-    if (!open) {
-      at(x, y + 0.19, z, sx + 0.012, 0.025, sz + 0.012, { color: OD_D, mat: 'paint' });
-      at(x, y + 0.215, z, rotY ? 0.03 : 0.12, 0.018, rotY ? 0.12 : 0.03, { color: STEELD, mat: 'metal' });
-    } else {
-      // lid flipped back, rounds stood up inside
-      at(x, y + 0.19, z + (rotY ? 0 : sz / 2 + 0.012), sx + 0.012, 0.2, 0.012, { color: OD_D, mat: 'paint' });
-      for (let i = 0; i < 6; i++) for (let j = 0; j < 3; j++) {
-        const px = x - sx / 2 + 0.03 + i * ((sx - 0.06) / 5), pz = z - sz / 2 + 0.03 + j * ((sz - 0.06) / 2);
-        at(px, y + 0.17, pz, 0.016, 0.05, 0.016, { color: BRASSC, mat: 'metal', solid: false, shape: 'cyl' });
-        at(px, y + 0.22, pz, 0.011, 0.016, 0.011, { color: TIP, mat: 'metal', solid: false, noShadow: true });
+// ---------------------------------------------------------------- block lettering
+// Signs: capital letters built from little boxes on a 5x7 grid (runs in a row are merged into one box).
+const FONT = {
+  A: '01110100011000111111100011000110001', B: '11110100011000111110100011000111110', C: '01110100011000010000100001000101110',
+  D: '11110100011000110001100011000111110', E: '11111100001000011110100001000011111', F: '11111100001000011110100001000010000',
+  G: '01110100011000010111100011000101111', H: '10001100011000111111100011000110001', I: '01110001000010000100001000010001110',
+  K: '10001100101010011000101001001010001', L: '10000100001000010000100001000011111', M: '10001110111010110001100011000110001',
+  N: '10001110011010110011100011000110001', O: '01110100011000110001100011000101110', P: '11110100011000111110100001000010000',
+  R: '11110100011000111110101001001010001', S: '01111100001000001110000010000111110', T: '11111001000010000100001000010000100',
+  U: '10001100011000110001100011000101110', V: '10001100011000110001100010101000100', W: '10001100011000110101101011010101010',
+  Y: '10001100010101000100001000010000100', '+': '00000001000010011111001000010000000', '-': '00000000000000011111000000000000000', ' ': '00000000000000000000000000000000000',
+  '0': '01110100011001110101110011000101110', '1': '00100011000010000100001000010001110', '2': '01110100010000100010001000100011111',
+  '3': '11110000010000101110000010000111110', '4': '00010001100101010010111110001000010', '5': '11111100001111000001000011000101110',
+  '6': '00110010001000011110100011000101110', '7': '11111000010001000100010000100001000', '8': '01110100011000101110100011000101110', '9': '01110100011000101111000010001001100',
+};
+// text centred at (x, y) on a wall facing `face` (one of 'n', 's', 'e', 'w': the direction the sign looks), letter
+// height h. Returns boxes to add to the world.
+export function blockText(text, x, y, z, h, face, color, emissive = 0.6) {
+  const px = h / 7, adv = px * 6, w = text.length * adv - px, out = [];
+  // along: the reading direction for someone looking at the sign
+  const along = { n: [-1, 0], s: [1, 0], e: [0, -1], w: [0, 1] }[face], out0 = { n: [0, -1], s: [0, 1], e: [1, 0], w: [-1, 0] }[face];
+  [...text.toUpperCase()].forEach((ch, ci) => {
+    const g = FONT[ch] || FONT[' '];
+    for (let r = 0; r < 7; r++) {
+      let c = 0;
+      while (c < 5) {
+        if (g[r * 5 + c] !== '1') { c++; continue; }
+        let e = c; while (e < 5 && g[r * 5 + e] === '1') e++;
+        const a0 = -w / 2 + ci * adv + c * px, a1 = -w / 2 + ci * adv + e * px, y1 = y + h / 2 - r * px, y0 = y1 - px;
+        const p0 = [x + along[0] * a0, z + along[1] * a0], p1 = [x + along[0] * a1, z + along[1] * a1];
+        const d0 = 0, d1 = 0.012;
+        const xs = [p0[0], p1[0], p0[0] + out0[0] * d1, p1[0] + out0[0] * d1], zs = [p0[1], p1[1], p0[1] + out0[1] * d1, p1[1] + out0[1] * d1];
+        out.push(makeBox([Math.min(...xs), y0, Math.min(...zs)], [Math.max(...xs), y1, Math.max(...zs)], { color, emissive, grid: false, solid: false, noShadow: true, edges: false }));
+        c = e;
       }
     }
-    at(x + (rotY ? 0 : sx / 2 + 0.006), y + 0.12, z + (rotY ? sz / 2 + 0.006 : 0), rotY ? 0.04 : 0.012, 0.05, rotY ? 0.012 : 0.04, { color: STEELD, mat: 'metal', solid: false });
-    deco([x - sx / 2 - 0.001, y + 0.06, z - sz / 2 - 0.004], [x + sx / 2 + 0.001, y + 0.085, z - sz / 2 + 0.001], { color: STEN, emissive: 0.05 });
-    return [x, y + 0.2, z];
-  };
-  crates.forEach(([cx, cz, W], ci) => {
-    const x0 = cx - W / 2, x1 = cx + W / 2, z0 = cz - D / 2, z1 = cz + D / 2, y = by;
-    // the crate: painted planks (wood grain under olive paint), a darker plinth, steel corners and bands
-    add([x0, y, z0], [x1, y + 0.08, z1], { color: OD_D, tex: 12, mat: 'paint' });
-    add([x0, y, z0], [x1, y + Hh, z0 + t], { color: OD, tex: 12, mat: 'paint' });
-    add([x0, y, z1 - t], [x1, y + Hh, z1], { color: OD, tex: 12, mat: 'paint' });
-    add([x0, y, z0], [x0 + t, y + Hh, z1], { color: OD, tex: 12, mat: 'paint' });
-    add([x1 - t, y, z0], [x1, y + Hh, z1], { color: OD, tex: 12, mat: 'paint' });
-    add([x0 - 0.02, y, z0 - 0.02], [x1 + 0.02, y + 0.06, z1 + 0.02], { color: OD_D, mat: 'paint' });                       // skid
-    for (const xx of [x0, x1]) for (const zz of [z0, z1]) add([xx - 0.035, y, zz - 0.035], [xx + 0.035, y + Hh + 0.015, zz + 0.035], { color: STEELD, mat: 'metal' });
-    for (const yy of [0.18, 0.46]) deco([x0 - 0.012, y + yy, z0 - 0.012], [x1 + 0.012, y + yy + 0.04, z0 + 0.001], { color: STEELD, mat: 'metal' });     // steel bands
-    deco([x0 - 0.012, y + Hh - 0.03, z0 - 0.012], [x1 + 0.012, y + Hh, z1 + 0.012], { color: OD_D, mat: 'paint' });                                     // rim
-    // stencils on the front: a big line of "text", a smaller one, and a yellow hazard band at the end
-    stencil(x0 + 0.18, y + 0.27, z0 - 0.012, Math.min(1.3, W - 0.75), 0.07, 17 + ci * 31);
-    stencil(x0 + 0.18, y + 0.37, z0 - 0.012, 0.8, 0.04, 91 + ci * 7, STENW);
-    deco([x1 - 0.42, y + 0.26, z0 - 0.016], [x1 - 0.14, y + 0.42, z0 - 0.001], { color: STEN, emissive: 0.06 });
-    for (let k = 0; k < 4; k++) deco([x1 - 0.4 + k * 0.07, y + 0.26, z0 - 0.018], [x1 - 0.37 + k * 0.07, y + 0.42, z0 - 0.015], { color: [0.08, 0.08, 0.08] });
-    // rope handles at both ends
-    for (const [xx, s] of [[x0, -1], [x1, 1]]) {
-      at(xx + s * 0.03, y + 0.42, cz - 0.16, 0.04, 0.04, 0.04, { color: STEELD, mat: 'metal', solid: false });
-      at(xx + s * 0.03, y + 0.42, cz + 0.16, 0.04, 0.04, 0.04, { color: STEELD, mat: 'metal', solid: false });
-      at(xx + s * 0.06, y + 0.38, cz, 0.03, 0.03, 0.36, { color: ROPE, mat: 'cloth', solid: false, shape: 'cyl' });
-    }
-    // the lid, propped open against the wall behind, with its own stencil and hinges
-    add([x0 + 0.05, y + 0.05, z1 + 0.04], [x1 - 0.05, y + 0.95, z1 + 0.1], { color: OD, tex: 12, mat: 'paint', solid: false });
-    stencil(x0 + 0.3, y + 0.62, z1 + 0.039, Math.min(1.6, W - 0.6), 0.09, 53 + ci * 13);
-    for (const xx of [x0 + 0.4, x1 - 0.4]) at(xx, y + Hh - 0.03, z1 + 0.04, 0.1, 0.06, 0.04, { color: STEELD, mat: 'metal', solid: false });
-    // the guns: two rows, jammed in at odd angles
-    const mine = groups[ci];
-    const cols = Math.ceil(mine.length / 2);
-    mine.forEach((def, i) => {
-      const row = i % 2, col = Math.floor(i / 2);
-      const rnd = (k) => { const v = Math.sin((i + 1) * 12.9898 + (ci + 1) * 78.233 + k * 37.719) * 43758.5453; return v - Math.floor(v); };
-      const px = x0 + 0.3 + (col + 0.5) * ((W - 0.6) / cols) + (rnd(1) - 0.5) * 0.08;
-      const pz = row ? cz + 0.24 : cz - 0.2;
-      const len = Math.max(...def.parts.map((p) => -(p.c[2] - p.s[2] / 2)));
-      const py = y + Math.max(Hh + 0.08, 0.2 + len * 0.9);
-      const up = norm3([(rnd(2) - 0.5) * 0.7, 1, (rnd(3) - 0.5) * 0.35 - 0.12]);
-      const f = [Math.sin((rnd(4) - 0.5) * 0.8), 0, -Math.cos((rnd(4) - 0.5) * 0.8)];
-      const fd = f[0] * up[0] + f[1] * up[1] + f[2] * up[2];
-      const xa = norm3([f[0] - up[0] * fd, f[1] - up[1] * fd, f[2] - up[2] * fd]);
-      const ya = [up[1] * xa[2] - up[2] * xa[1], up[2] * xa[0] - up[0] * xa[2], up[0] * xa[1] - up[1] * xa[0]];
-      const m = mat4();
-      m.set([...xa, 0, ...ya, 0, ...up, 0, px, py, pz, 1]);
-      items.push({
-        def, base: m, lift: 0, crate: ci,
-        aim: [px + up[0] * 0.18, py + up[1] * 0.18, pz + up[2] * 0.18],
-        center: [px, y, pz],
-        parts(time, hot) {
-          this.lift += ((hot ? 0.14 : 0) - this.lift) * 0.2;
-          const mm = mat4();
-          mm.set(this.base);
-          mm[12] += up[0] * this.lift; mm[13] += up[1] * this.lift; mm[14] += up[2] * this.lift;
-          return Weapon.worldParts(this.def, mm).map((p) => (hot ? { ...p, emissive: Math.max(p.emissive, 0.12) } : p));
-        },
-      });
-    });
-    // ammo round the crate: a stack of cans (top one open), loose mags, a box of shells, a belt of rounds
-    const sx = ci ? x1 + 0.3 : x0 - 0.3;
-    ammoCan(sx, y, cz - 0.3, false);
-    ammoCan(sx, y, cz + 0.05, false);
-    const top = ammoCan(sx, y + 0.24, cz - 0.12, true);
-    items.push({ ammo: true, aim: top, center: [sx, y, cz], parts: () => [] });
-    for (let k = 0; k < 3; k++) {
-      const mx = cx - 0.5 + k * 0.28, mz = z0 - 0.22 - (k % 2) * 0.07;
-      at(mx, y, mz, 0.05, 0.03, 0.16, { color: [0.12, 0.12, 0.13], mat: 'metal', solid: false });
-      at(mx, y + 0.03, mz - 0.05, 0.03, 0.006, 0.03, { color: BRASSC, mat: 'metal', solid: false, noShadow: true });
-    }
-    at(cx + 0.55, y, z0 - 0.25, 0.22, 0.07, 0.12, { color: [0.75, 0.12, 0.08], mat: 'paint', solid: false });
-    at(cx + 0.55, y + 0.07, z0 - 0.25, 0.224, 0.012, 0.124, { color: STENW, mat: 'paint', solid: false });
-    for (let k = 0; k < 9; k++) at(cx + 0.1 + k * 0.035, y, z0 - 0.42 + Math.sin(k * 0.8) * 0.04, 0.014, 0.014, 0.055, { color: k % 3 ? BRASSC : [0.25, 0.22, 0.18], mat: 'metal', solid: false, noShadow: true });
   });
+  return out;
+}
+
+// ---------------------------------------------------------------- armoury gun walls
+// Every gun hangs on its own panel on the armoury walls. A panel with a variant has the variant mounted on its back:
+// press E on a gun you're already holding and the panel spins round on its axle to show (and hand you) the
+// variant; press E again and it spins back. Look at the ammo station and press E to fill up both guns.
+// racks: [{ o: centre of the row, n: the way the wall faces, ids: [base gun ids], w: panel width, gap: spacing,
+//   col: the rack's colour }]; defFor(id) builds a gun; variantOf(id) gives the variant's id (or null).
+const PANEL = [0.11, 0.115, 0.13], PANEL_E = [0.2, 0.21, 0.24];
+export function gunWalls(racks, defFor, variantOf) {
+  const items = [];
+  const box = (B, p, c, s, color, o = {}) => {
+    const m = mat4(), [x, y, z] = B;
+    const w = [p[0] + x[0] * c[0] + y[0] * c[1] + z[0] * c[2], p[1] + x[1] * c[0] + y[1] * c[1] + z[1] * c[2], p[2] + x[2] * c[0] + y[2] * c[1] + z[2] * c[2]];
+    m.set([x[0] * s[0], x[1] * s[0], x[2] * s[0], 0, y[0] * s[1], y[1] * s[1], y[2] * s[1], 0, z[0] * s[2], z[1] * s[2], z[2] * s[2], 0, w[0], w[1], w[2], 1]);
+    return { model: m, scale: s, color, emissive: o.em || 0, shape: o.shape, mat: o.mat || 'metal', edges: 0 };
+  };
+  const rot = (v, a, t) => {            // v rotated about unit axis a by t (Rodrigues)
+    const c = Math.cos(t), s = Math.sin(t), d = v[0] * a[0] + v[1] * a[1] + v[2] * a[2];
+    const cr = [a[1] * v[2] - a[2] * v[1], a[2] * v[0] - a[0] * v[2], a[0] * v[1] - a[1] * v[0]];
+    return [0, 1, 2].map((k) => v[k] * c + cr[k] * s + a[k] * d * (1 - c));
+  };
+  for (const r of racks) {
+    const n = [r.n[0], 0, r.n[1]], up = [0, 1, 0];
+    const a = [n[1] * up[2] - n[2] * up[1], n[2] * up[0] - n[0] * up[2], n[0] * up[1] - n[1] * up[0]];      // along the wall
+    r.ids.forEach((id, i) => {
+      const off = (i - (r.ids.length - 1) / 2) * r.gap;
+      const c = [r.o[0] + a[0] * off + n[0] * 0.13, r.o[1], r.o[2] + a[2] * off + n[2] * 0.13];
+      const vid = variantOf(id);
+      const it = {
+        id, vid, side: 0, flipT: 1, col: r.col, rack: r.name, w: r.w,
+        defs: [defFor(id), vid ? defFor(vid) : null],
+        get def() { return this.defs[this.side]; },
+        get other() { return this.vid ? this.defs[1 - this.side] : null; },
+        aim: c, center: [c[0], 0, c[2]], normal: n,
+        refresh(df) { this.defs = [df(this.id), this.vid ? df(this.vid) : null]; },
+        flip() { if (!this.vid || this.flipT < 1) return false; this.side = 1 - this.side; this.flipT = 0; return true; },
+        update(dt) { if (this.flipT < 1) this.flipT = Math.min(1, this.flipT + dt / 0.75); },
+        parts(time, hot) {
+          // the angle: eased, with a little overshoot and settle as the panel locks in
+          const k = this.flipT, e = k < 1 ? 1 - Math.pow(1 - k, 3) + Math.sin(k * Math.PI) * 0.12 : 1;
+          const ang = this.vid ? (this.side ? Math.PI * e : Math.PI * (1 - e)) : 0;          // side 0 -> 0, side 1 -> pi
+          const X = rot(n, a, ang), Y = rot(up, a, ang), B = [X, Y, a];
+          const out = [];
+          const glow = hot ? 0.55 + 0.25 * Math.sin(time * 6) : 0;
+          // the panel: a dark plate, a frame, the rack's colour along the bottom edge (on both faces), an axle
+          out.push(box(B, c, [0, 0, 0], [0.04, 0.46, this.w], PANEL, { mat: 'paint' }));
+          for (const sy of [-1, 1]) out.push(box(B, c, [0, sy * 0.238, 0], [0.05, 0.016, this.w + 0.02], PANEL_E, { mat: 'metal' }));
+          for (const sz of [-1, 1]) out.push(box(B, c, [0, 0, sz * (this.w / 2 + 0.002)], [0.05, 0.476, 0.016], PANEL_E, { mat: 'metal' }));
+          for (const sx of [-1, 1]) out.push(box(B, c, [sx * 0.021, -0.205, 0], [0.004, 0.022, this.w - 0.06], hot ? [1, 1, 1].map((v, q) => r.col[q] + (v - r.col[q]) * glow * 0.6) : r.col, { em: 0.5 + glow }));
+          out.push(box([n, up, a], c, [-0.07, 0, 0], [0.05, 0.05, this.w + 0.12], PANEL_E, { shape: 'cyl', mat: 'steel' }));
+          // a little light in the corner if there's a variant on the back (blinks while it spins)
+          if (this.vid) for (const sx of [-1, 1]) out.push(box(B, c, [sx * 0.022, 0.19, this.w / 2 - 0.05], [0.004, 0.02, 0.02], [1, 0.75, 0.15], { em: k < 1 ? (Math.sin(time * 30) > 0 ? 1 : 0.2) : 0.9 }));
+          // the guns: the front one on the front face, the variant upside-down on the back
+          const mount = (def, sx) => {
+            if (!def) return;
+            const ps = def.parts.filter((p) => !p.hidden);
+            const z0 = Math.min(...ps.map((p) => p.c[2] - p.s[2] / 2)), z1 = Math.max(...ps.map((p) => p.c[2] + p.s[2] / 2));
+            const y0 = Math.min(...ps.map((p) => p.c[1] - p.s[1] / 2)), y1 = Math.max(...ps.map((p) => p.c[1] + p.s[1] / 2));
+            const sc = Math.min(1, (this.w - 0.08) / (z1 - z0), 0.36 / (y1 - y0));
+            const gx = sx > 0 ? X : X.map((v) => -v), gy = sx > 0 ? Y : Y.map((v) => -v);
+            const gz = [gx[1] * gy[2] - gx[2] * gy[1], gx[2] * gy[0] - gx[0] * gy[2], gx[0] * gy[1] - gx[1] * gy[0]];
+            const lc = [0, (y0 + y1) / 2, (z0 + z1) / 2], d = 0.075;
+            const pos = [0, 1, 2].map((q) => c[q] + X[q] * d * sx - (gx[q] * lc[0] + gy[q] * lc[1] + gz[q] * lc[2]) * sc);
+            const m = mat4();
+            m.set([gx[0] * sc, gx[1] * sc, gx[2] * sc, 0, gy[0] * sc, gy[1] * sc, gy[2] * sc, 0, gz[0] * sc, gz[1] * sc, gz[2] * sc, 0, pos[0], pos[1], pos[2], 1]);
+            const gp = Weapon.worldParts(def, m).map((p) => ({ ...p, scale: p.scale.map((v) => v * sc) }));
+            for (const p of gp) out.push(hot && sx > 0 === (ang < Math.PI / 2) ? { ...p, emissive: Math.max(p.emissive, 0.1) } : p);
+            // two pegs it hangs on
+            for (const t of [0.3, 0.7]) out.push(box(sx > 0 ? B : [X.map((v) => -v), Y.map((v) => -v), a], c, [0.035, y0 * sc - (y0 + y1) / 2 * sc - 0.01, ((z0 + (z1 - z0) * t) - (z0 + z1) / 2) * sc * (sx > 0 ? 1 : 1)], [0.04, 0.012, 0.012], PANEL_E, { mat: 'steel' }));
+          };
+          mount(this.defs[0], 1);
+          mount(this.defs[1], -1);
+          return out;
+        },
+      };
+      items.push(it);
+    });
+  }
   return items;
 }
-const norm3 = (v) => { const l = Math.hypot(v[0], v[1], v[2]) || 1; return [v[0] / l, v[1] / l, v[2] / l]; };
-

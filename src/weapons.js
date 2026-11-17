@@ -1386,11 +1386,63 @@ const BALANCE = {
 };
 for (const [id, b] of Object.entries(BALANCE)) Object.assign(WEAPONS[id], b);
 
-// ---------------------------------------------------------------- build 0.57: variants
-// Factory variants of the guns above: the same model in a new finish, tuned to play differently (a rapid one, a
-// heavy-barrel one, an extended-mag one...). `k` multiplies the base gun's stats; `set` overrides them outright.
+// what each gun is, in a line (the armoury's info card)
+export const GUN_DESC = {
+  ar: 'The all-rounder. Steady full auto that works at almost any range.',
+  burst: 'Three-round bursts. Land all three on the head and they drop.',
+  hx17: 'Heavy rounds, slower fire. Hits hard at mid range.',
+  cr56: 'A short, light carbine. Fast to aim, easy to move with.',
+  dmr: 'Semi-auto marksman rifle. Two or three hits from a long way off.',
+  bullpup: 'A compact rifle with a built-in scope. Long reach, small body.',
+  smg: 'Fast-firing and light. Shreds up close, struggles at range.',
+  kv: 'Very high fire rate with almost no kick. Empties in a blink.',
+  zu9: 'Tiny and quick. The fastest gun to swing around a corner.',
+  kr45: 'Heavy .45 rounds: slower than other SMGs, but each hit counts.',
+  pdx: 'A personal defence weapon. Big mag, good accuracy for its size.',
+  shotgun: 'Pump action. One clean hit up close is usually enough.',
+  autoshotgun: 'Fires as fast as you can pull the trigger. Messy and brutal.',
+  rt7: 'A semi-auto shotgun with a long tube. Keeps firing.',
+  double: 'Two barrels, two shots, then reload. Devastating at arm\'s length.',
+  slug: 'Fires single heavy slugs: a shotgun that can reach.',
+  sniper: 'Bolt action. A head hit from anywhere is a kill.',
+  amr: 'Anti-materiel rifle. Huge damage, huge kick, slow to handle.',
+  rg1: 'Hold to charge for a second. Whatever the beam hits dies.',
+  lever: 'Fast lever action. Quicker follow-ups than a bolt sniper.',
+  lmg: 'A belt-fed machine gun. Lay down fire and keep it there.',
+  rk74: 'A drum-fed light machine gun: big mag, controllable.',
+  bruiser: 'A heavy machine gun. Slow, loud and very hard-hitting.',
+  minigun: 'Spins up, then never stops. Very slow to move with.',
+  pistol: 'A dependable sidearm. Quick to draw, quick to fire.',
+  mp: 'A machine pistol: full auto in one hand.',
+  bx9: 'A full-auto machine pistol with a fold-down grip.',
+  hc50: 'A hand cannon. Few rounds, every one of them heavy.',
+  revolver: 'Six heavy rounds. Slow, but each one lands hard.',
+};
+
+// ---------------------------------------------------------------- variants (reworked in build 0.63)
+// One special version of a dozen guns, each built to play differently from the gun it's based on: a new fire mode,
+// special rounds (fire, explosive), or a reworked body (a built-in suppressor, a sawn-off barrel, a drum, a long
+// barrel). `k` multiplies the base gun's stats; `set` overrides them; `o.kit` is a set of attachments that come
+// built in (fitted in attachments.js, and locked); `o.cut` saws the gun off at that z; `o.stretch` = [z, metres]
+// lengthens everything in front of z. `o.desc` is what the armoury shows.
 export const VARIANT_OF = {};
-function tune(id, base, name, finish, k = {}, set = {}) {
+function cutAt(w, z) {
+  for (const p of w.parts) {
+    const front = p.c[2] - p.s[2] / 2, back = p.c[2] + p.s[2] / 2;
+    if (back <= z + 0.004) p.hidden = true;
+    else if (front < z) { p.s[2] = back - z; p.c[2] = (back + z) / 2; }
+  }
+  w.muzzle = [w.muzzle[0], w.muzzle[1], z - 0.01];
+}
+function stretchAt(w, z, add) {
+  for (const p of w.parts) {
+    const front = p.c[2] - p.s[2] / 2, back = p.c[2] + p.s[2] / 2;
+    if (back <= z) p.c[2] -= add;
+    else if (front < z) { p.s[2] += add; p.c[2] -= add / 2; }
+  }
+  w.muzzle = [w.muzzle[0], w.muzzle[1], w.muzzle[2] - add];
+}
+function tune(id, base, name, finish, k = {}, set = {}, o = {}) {
   const w = clone(WEAPONS[base]);
   const [body, accent] = finish;
   for (const p of w.parts) {
@@ -1400,12 +1452,14 @@ function tune(id, base, name, finish, k = {}, set = {}) {
     else if (lum > 0.13) p.col = body.map((c) => Math.min(1, c * Math.min(1.7, 0.55 + lum * 1.9)));   // the body, keeping its light and dark panels
   }
   const mul = (key, round) => { if (k[key] != null && w[key] != null) w[key] = round ? Math.round(w[key] * k[key]) : +(w[key] * k[key]).toFixed(3); };
-  mul('dmg', true); mul('rpm', true); mul('mag', true); mul('reload'); mul('reloadEmpty'); mul('moveMul'); mul('adsSpeed');
+  mul('dmg', true); mul('rpm', true); mul('mag', true); mul('reload'); mul('reloadEmpty'); mul('moveMul'); mul('adsSpeed'); mul('pellets', true);
   if (k.moveMul != null && WEAPONS[base].moveMul == null) w.moveMul = k.moveMul;
   if (k.recoil && w.recoil) w.recoil = { ...w.recoil, up: w.recoil.up * k.recoil, side: w.recoil.side * k.recoil };
-  if (k.spread && w.spread) w.spread = { ...w.spread, base: w.spread.base * k.spread, bloom: w.spread.bloom * k.spread, bloomMax: w.spread.bloomMax * k.spread };
+  if (k.spread && w.spread) w.spread = { ...w.spread, base: w.spread.base * k.spread, bloom: w.spread.bloom * k.spread, bloomMax: w.spread.bloomMax * k.spread, move: w.spread.move * k.spread };
   if (k.sound && w.sound) w.sound = { ...w.sound, freq: w.sound.freq * k.sound, gain: w.sound.gain * (k.gain ?? 1) };
-  Object.assign(w, set, { id, name, style: WEAPONS[base].style || base });
+  if (o.cut != null) cutAt(w, o.cut);
+  if (o.stretch) stretchAt(w, o.stretch[0], o.stretch[1]);
+  Object.assign(w, set, { id, name, style: WEAPONS[base].style || base, kit: o.kit || null, vdesc: o.desc || '' });
   WEAPONS[id] = w; VARIANT_OF[id] = base;
 }
 const F = {      // finishes: [body, accent]
@@ -1413,41 +1467,37 @@ const F = {      // finishes: [body, accent]
   forest: [[0.25, 0.32, 0.2], [0.95, 0.75, 0.2]], rust: [[0.5, 0.25, 0.14], [1, 0.8, 0.3]], navy: [[0.14, 0.2, 0.36], [1, 0.45, 0.1]],
   wine: [[0.42, 0.1, 0.14], [0.9, 0.9, 0.92]], steel: [[0.52, 0.54, 0.58], [1, 0.15, 0.15]], violet: [[0.32, 0.18, 0.5], [0.3, 1, 0.9]],
   hazard: [[0.9, 0.7, 0.1], [0.08, 0.08, 0.09]], teal: [[0.1, 0.42, 0.42], [1, 0.9, 0.3]], bone: [[0.8, 0.76, 0.66], [0.6, 0.1, 0.1]],
+  ember: [[0.16, 0.1, 0.08], [1, 0.42, 0.05]],
 };
 // rifles
-tune('ar_sd', 'ar', 'SF-47 SD', F.night, { dmg: 0.92, recoil: 0.7, sound: 0.6, gain: 0.55 });                    // quiet and steady
-tune('ar_hb', 'ar', 'SF-47 HB', F.sand, { dmg: 1.2, rpm: 0.8, recoil: 1.15, moveMul: 0.97 });                    // heavy barrel: slower, harder
-tune('burst_r', 'burst', 'BR-3 RAPID', F.navy, { rpm: 1.2, dmg: 0.9, recoil: 1.1 });
-tune('hx17_c', 'hx17', 'HX-17 CARBON', F.steel, { moveMul: 1.05, adsSpeed: 1.25, mag: 0.8 });
-tune('cr56_x', 'cr56', 'CR-56 RAPID', F.violet, { rpm: 1.19, dmg: 0.86, recoil: 1.1 });
-tune('dmr_h', 'dmr', 'FC-308 HEAVY', F.forest, { dmg: 1.18, rpm: 0.78, mag: 0.67, recoil: 1.2 });
-tune('bullpup_s', 'bullpup', 'BX-56 SHORT', F.hazard, { rpm: 1.1, moveMul: 1.04, spread: 1.25 });
+tune('ar_sd', 'ar', 'SF-47 SD', F.night, { recoil: 0.75 }, {}, { kit: { muzzle: 'monocore', ammo: 'subsonic' },
+  desc: 'Built-in silencer and subsonic rounds: almost no sound, no muzzle flash, and it barely kicks. Shorter reach.' });
+tune('burst_a', 'burst', 'BR-3 AUTO', F.navy, { dmg: 0.86 }, { auto: true, burst: 0, rpm: 820 }, { kit: { magazine: 'extmag' },
+  desc: 'Converted to full auto with a long mag. Hold the trigger instead of pulsing bursts.' });
+tune('dmr_i', 'dmr', 'FC-308 FIRESTARTER', F.ember, { dmg: 0.9 }, {}, { kit: { ammo: 'incendiary', optic: 'acog3x' },
+  desc: 'Incendiary rounds and a 3x scope. Every hit sets them on fire.' });
 // SMGs
-tune('smg_r', 'smg', 'V9-S RAPTOR', F.wine, { rpm: 1.2, dmg: 0.86, mag: 0.9 });
-tune('kv_x', 'kv', 'KV-45 EXTENDED', F.teal, { mag: 1.6, reload: 1.2, reloadEmpty: 1.2, moveMul: 0.97 });
-tune('kr45_s', 'kr45', 'KR-45 SILENT', F.night, { dmg: 0.93, recoil: 0.75, sound: 0.6, gain: 0.5 });
-tune('pdx_a', 'pdx', 'PDX-57 ARCTIC', F.arctic, { dmg: 1.12, rpm: 0.88 });
-tune('zu9_h', 'zu9', 'ZU-9 HORNET', F.hazard, { rpm: 1.13, mag: 0.8, moveMul: 1.03 });
+tune('smg_r', 'smg', 'V9-S RAPTOR', F.wine, { dmg: 0.95 }, { auto: false, burst: 4, burstGap: 0.18, rpm: 1500 }, { kit: { optic: 'reddot' },
+  desc: 'Fires 4-round bursts at a blistering rate. Four hits in a blink, then a short pause.' });
+tune('kv_d', 'kv', 'KV-45 DRUM', F.teal, {}, {}, { kit: { magazine: 'drum' },
+  desc: 'A huge drum mag: spray down whole rooms without reloading. Heavy and slow to swap.' });
 // shotguns
-tune('shotgun_l', 'shotgun', 'SG-12 LONG TOM', F.forest, { spread: 0.62, rpm: 0.85, moveMul: 0.96 });               // tight pattern, reaches further
-tune('auto_s', 'autoshotgun', 'AS-20 SHORTY', F.rust, { rpm: 1.25, mag: 0.75, spread: 1.25, moveMul: 1.05 });
-tune('double_s', 'double', 'DB-2 SAWN-OFF', F.bone, { dmg: 1.2, spread: 1.5, moveMul: 1.06 });
-tune('rt7_t', 'rt7', 'RT-7 TACTICAL', F.navy, { mag: 1.3, spread: 0.85, reload: 1.1 });
+tune('double_s', 'double', 'DB-2 SAWN-OFF', F.bone, { pellets: 2, spread: 1.7, moveMul: 1.06, reload: 0.8, reloadEmpty: 0.8 }, { mag: 1 }, { cut: -0.36, kit: { stock: 'nostock' },
+  desc: 'Barrels and stock sawn off. Fires both barrels at once: a huge, wide blast. Point blank only.' });
+tune('shotgun_d', 'shotgun', "SG-12 DRAGON", F.ember, {}, {}, { kit: { ammo: 'dragon', muzzle: 'duckbill' },
+  desc: "Loaded with dragon's breath: a jet of fire that sets everything in front of you alight." });
 // long guns
-tune('sniper_l', 'sniper', 'LH-7 LIGHT', F.arctic, { dmg: 0.85, rpm: 1.3, moveMul: 1.05, adsSpeed: 1.25 });
-tune('rg1_c', 'rg1', 'RG-1 OVERCHARGE', F.violet, {}, { charge: 1.5, railBlast: 3.2, reload: 2.1, reloadEmpty: 2.1 });   // slower to charge; the slug explodes where it lands
-tune('lever_b', 'lever', 'LV-44 BRUSH', F.rust, { rpm: 1.25, dmg: 0.9, moveMul: 1.03 });
-tune('amr_d', 'amr', 'AMR-50 DESERT', F.sand, { dmg: 1.1, rpm: 0.85, recoil: 1.15 });
+tune('sniper_x', 'sniper', 'LH-7 EXPLOSIVE', F.hazard, { dmg: 0.8, rpm: 0.9 }, { blast: { r: 2.4, dmg: 55 } }, {
+  desc: 'Explosive rounds: every shot bursts where it lands, hurting anyone near it and blowing chunks out of cover.' });
+tune('rg1_c', 'rg1', 'RG-1 OVERCHARGE', F.violet, {}, { charge: 1.5, blast: { r: 3.2, dmg: 90 }, reload: 2.1, reloadEmpty: 2.1 }, {
+  desc: 'Takes 1.5 s to charge instead of 1, but the slug explodes where it lands.' });
 // machine guns
-tune('lmg_s', 'lmg', 'M60-X SAW', F.forest, { mag: 0.6, reload: 0.75, reloadEmpty: 0.75, moveMul: 1.06 });
-tune('rk74_d', 'rk74', 'RK-74 DRUM', F.wine, { mag: 1.33, reload: 1.15, reloadEmpty: 1.15, moveMul: 0.96 });
-tune('bruiser_ap', 'bruiser', 'BRUISER AP', F.steel, { dmg: 1.17, rpm: 0.85, recoil: 1.15 });
-tune('minigun_t', 'minigun', 'ROTARY-X TURBO', F.hazard, { rpm: 1.2, dmg: 0.88, mag: 1.25 });
+tune('lmg_s', 'lmg', 'M60-X SAW', F.forest, { mag: 0.6, rpm: 1.15, moveMul: 1.1, reload: 0.7, reloadEmpty: 0.7, recoil: 1.15 }, {}, { cut: -0.62,
+  desc: 'Barrel cut down for close quarters: lighter, faster firing and quicker to reload, with a smaller belt.' });
 // sidearms
-tune('pistol_m', 'pistol', 'P-19 MATCH', F.steel, { dmg: 1.12, spread: 0.6, rpm: 0.9 });
-tune('revolver_s', 'revolver', 'R-357 SNUB', F.bone, { dmg: 0.85, rpm: 1.3, moveMul: 1.03, spread: 1.3 });
-tune('hc50_l', 'hc50', 'HC-50 LONGSLIDE', F.navy, { dmg: 1.1, rpm: 0.85, spread: 0.7 });
-tune('bx9_d', 'bx9', 'BX-9 DRUM', F.teal, { mag: 1.8, reload: 1.3, reloadEmpty: 1.3, moveMul: 0.97 });
-tune('mp_r', 'mp', 'MP-9 RUSH', F.wine, { rpm: 1.15, dmg: 0.9 });
+tune('pistol_a', 'pistol', 'P-19 AUTO', F.steel, { dmg: 0.8, recoil: 0.8 }, { auto: true, rpm: 1050 }, { kit: { magazine: 'extmag', muzzle: 'compensator' },
+  desc: 'Full-auto conversion with a compensator and a long mag. A pocket SMG.' });
+tune('revolver_h', 'revolver', 'R-357 HUNTER', F.rust, { dmg: 1.25, rpm: 0.85, spread: 0.55, adsSpeed: 0.85 }, {}, { stretch: [-0.06, 0.1], kit: { optic: 'pistoldot' },
+  desc: 'A long hunting barrel and a red dot. Hits like a rifle at range, slower to swing.' });
 
 export const CASE_ORDER = ['ar', 'burst', 'hx17', 'cr56', 'dmr', 'bullpup', 'smg', 'kv', 'zu9', 'kr45', 'pdx', 'mp', 'shotgun', 'autoshotgun', 'rt7', 'double', 'slug', 'sniper', 'amr', 'rg1', 'lever', 'lmg', 'rk74', 'bruiser', 'minigun', 'pistol', 'bx9', 'hc50', 'revolver'];

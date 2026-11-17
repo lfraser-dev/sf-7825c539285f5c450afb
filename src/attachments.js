@@ -1,4 +1,4 @@
-import { VARIANT_OF } from './weapons.js';
+import { VARIANT_OF, WEAPONS } from './weapons.js';
 // Weapon attachments. Each attachment changes stats and adds/edits box parts on the gun model.
 // buildDef(base, loadout) returns a new weapon definition with everything applied.
 
@@ -344,8 +344,8 @@ export function buildDef(base, loadout = {}) {
     range: RANGE[id] ?? RANGE[style],
     flashScale: 1,
     hipSpread: 1,
-    laser: null,
-    laserCol: null,
+    laser: base.laser ?? null,
+    laserCol: base.laserCol ?? null,
     loadout: { ...loadout },
   };
   const part = (name) => def.parts.find((p) => p.name === name);
@@ -671,15 +671,15 @@ export function buildDef(base, loadout = {}) {
   def.spread.base *= k.spreadBase;
   def.spread.move *= k.spreadMove;
   def.spread.ads *= k.adsSpread;
-  def.hipSpread = k.hipSpread;
-  def.range = (RANGE[id] ?? RANGE[style]) * k.range;
+  def.hipSpread = (base.hipSpread ?? 1) * k.hipSpread;
+  def.range = (RANGE[id] ?? RANGE[style]) * k.range * (base.rangeK ?? 1);
   def.dmg = Math.max(1, Math.round(def.dmg * k.dmg));
   def.rpm = Math.round(base.rpm * k.rpm);
   def.headMult = (def.headMult ?? base.headMult) * k.headMult;
   def.mag = Math.max(1, Math.round(def.mag * (mg === 'extmag' || mg === 'drum' || mg === 'lightmag' || mg === 'quadmag' ? 1 : k.mag)));
   def.sound.gain *= k.gain;
   if (k.gain < 0.5) { def.sound.freq *= 0.55; def.sound.thump *= 0.8; }
-  def.flashScale = k.flash;
+  def.flashScale = (base.flashScale ?? 1) * k.flash;
   if (base.reload) { def.reload = base.reload * k.reload; def.reloadEmpty = base.reloadEmpty * k.reload; }
   if (base.shellTime) def.shellTime = base.shellTime * k.reload;
   if (style === 'shotgun' && mg === 'fastmag' && base.shellTime) def.shellTime = base.shellTime * 0.7;
@@ -722,4 +722,22 @@ export function ratings(def) {
     { name: 'RELOAD', v: def.reload ? Math.max(0, 1 - def.reload / 4.5) : Math.max(0, 1 - def.shellTime / 0.8),
       text: def.reload ? `${def.reload.toFixed(2)} S` : `${def.shellTime.toFixed(2)} S/SHELL` },
   ];
+}
+
+// ---------------------------------------------------------------- variants: fit their built-in attachments
+// (a variant's `kit` is fitted once, here, into its base definition, and those slots are locked so it can't be
+// swapped off; a sawn-off or stretched gun also loses its barrel and muzzle slots)
+for (const [id, base] of Object.entries(VARIANT_OF)) {
+  const v = WEAPONS[id];
+  const lock = new Set(NO_SLOT[base] || []);
+  if (v.kit) {
+    for (const [slot, aid] of Object.entries(v.kit)) if (!optionsFor(id, slot).some((o) => o.id === aid)) console.warn('variant kit does not fit', id, slot, aid);
+    const b = buildDef(v, v.kit);
+    b.rangeK = b.range / (RANGE[id] ?? RANGE[styleOf(id)]);
+    delete b.loadout; delete b.range;
+    Object.assign(v, b);
+    Object.keys(v.kit).forEach((sl) => lock.add(sl));
+  }
+  if (v.parts.some((p) => p.hidden) || VARIANT_OF[id] === 'revolver') ['barrel', 'muzzle'].forEach((sl) => lock.add(sl));
+  NO_SLOT[id] = [...lock];
 }

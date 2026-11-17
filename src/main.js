@@ -3,10 +3,10 @@ import { World, moveBoxTo } from './world.js';
 import { Input } from './input.js';
 import { Player } from './player.js';
 import { Weapon, setHandLook } from './weapon.js';
-import { WEAPONS, CASE_ORDER, VARIANT_OF } from './weapons.js';
+import { WEAPONS, CASE_ORDER, VARIANT_OF, GUN_DESC } from './weapons.js';
 import { Effects } from './effects.js';
 import { Sounds } from './audio.js';
-import { Dummy, DestructibleWall, Workbench, gunCrates } from './props.js';
+import { Dummy, DestructibleWall, Workbench, gunWalls } from './props.js';
 import { mat4, perspective, lookDir, mul, cross, norm, damp, dot, compose, anglesFor, clamp } from './math.js';
 import { buildDef, ratings } from './attachments.js';
 import { CLASSES, CLASS_ORDER, ABILITIES, HEAVIES, SIDEARMS, THROWABLES, THROW_ORDER, TAKEDOWNS, takedownsFor, loadLoadout, saveLoadout } from './classes.js';
@@ -235,12 +235,11 @@ function myLook() {
   const r = (c) => (Array.isArray(c) ? c.map((v) => Math.round(v * 100) / 100) : null);
   return { m: r(o.jacket || o.vest || o.top), h: r(o.head && o.head !== 'hair' ? o.headCol : o.hair), b: r(o.bottom), s: r(o.shoes), g: r(o.gloves), w, a: loadouts[w] || {}, sk: cosmetics.equip[classLo.cls].wskin || '', eq: { ...cosmetics.equip[classLo.cls] }, fx: o.fxJacket || (!o.jacket && !o.vest ? o.fxTop : 0) || 0 };
 }
-const casePrim = CASE_ORDER.filter((id) => !SIDEARMS.includes(id)), caseHalf = Math.ceil(casePrim.length / 2);
-// the variants get crates of their own, in the same order as the guns they're built on
-const varOf = (ids) => ids.flatMap((id) => Object.keys(VARIANT_OF).filter((v) => VARIANT_OF[v] === id));
-const varPrim = varOf(casePrim), varHalf = Math.ceil(varPrim.length / 2);
-const cases = gunCrates(world, [casePrim.slice(0, caseHalf), casePrim.slice(caseHalf), CASE_ORDER.filter((id) => SIDEARMS.includes(id)),
-  varPrim.slice(0, varHalf), varPrim.slice(varHalf), varOf(CASE_ORDER.filter((id) => SIDEARMS.includes(id)))].map((g) => g.map((id) => defFor(id))), map.bench.pos);   // guns jammed in two crates by the workbench
+// the armoury: every gun on a wall panel, grouped by family; a gun with a variant has it on the back of its panel
+const variantOf = (id) => Object.keys(VARIANT_OF).find((v) => VARIANT_OF[v] === id) || null;
+const racks = map.armoury.racks.map((r) => ({ ...r, ids: CASE_ORDER.filter((id) => (WEAPONS[id].style || id) === r.fam) }));
+const cases = [...gunWalls(racks, defFor, variantOf), { ammo: true, aim: map.armoury.ammo, center: [map.armoury.ammo[0], 0, map.armoury.ammo[2]], parts: () => [] }];
+renderer.setRoom(map.armoury.room);
 const workbench = new Workbench(world, map.bench.pos);
 player.spawn(map.spawn.pos, map.spawn.yaw);
 const course = new Course(map.course, sounds);
@@ -274,17 +273,11 @@ function switchTo(i) {
   updateSlotHud();
 }
 
-// one primary and one sidearm: a sidearm always goes in slot 2, anything else replaces your primary
-// the test range has every gun, whatever your level: each crate gun also hands out its variants. Take the gun,
-// then press E on it again to swap through them (SF-47 -> SF-47 SD -> SF-47 HB -> SF-47 ...).
-const gunFamily = (id) => { const base = VARIANT_OF[id] || id; return [base, ...Object.keys(VARIANT_OF).filter((v) => VARIANT_OF[v] === base)]; };
-function nextInCase(caseId) {
-  const fam = gunFamily(caseId), held = slots[SIDEARMS.includes(caseId) ? 1 : 0]?.def.id, i = fam.indexOf(held);
-  return i < 0 ? caseId : fam[(i + 1) % fam.length];
-}
+// one primary and one sidearm: a sidearm always goes in slot 2, anything else replaces your primary.
+// The test range has every gun, whatever your level.
 function pickUp(caseDef) {
   if (launcherW) putAwayLauncher(false);
-  const def = defFor(nextInCase(caseDef.id));
+  const def = defFor(caseDef.id);
   const slot = SIDEARMS.includes(def.id) ? 1 : 0;
   if (slots[slot].def.id === def.id) { slots[slot].ammo = def.mag; if (current !== slot) switchTo(slot); else weapon().equip(); sounds.pickup(); return; }
   slots[slot] = new Weapon(def);
@@ -332,7 +325,7 @@ function applyLoadout(id, lo) {
   try { localStorage.setItem('semifinals.loadouts', JSON.stringify(loadouts)); } catch { /* ignore */ }
   const def = defFor(id);
   slots.forEach((w) => { if (w.def.id === id) w.setDef(def); });
-  cases.forEach((c) => { if (c.def?.id === id) c.def = def; });
+  cases.forEach((c) => c.refresh?.(defFor));
   updateSlotHud();
 }
 
@@ -431,7 +424,12 @@ function fire(w) {
     }
     const end = hit ? hit.point : [0, 1, 2].map((k) => o[k] + dir[k] * left);
     if (d.charge) railFx(muzzle, end, dir, hit, d);
-    else if (i < 4) effects.tracer(muzzle, end);
+    else if (i < 4 && !(d.flashScale === 0 && d.sound.gain < 0.3)) effects.tracer(muzzle, end);    // suppressed + subsonic: no tracer
+    if (d.blast && !d.charge && hit) {
+      // explosive rounds: a small blast where the round lands (it does the damage to whoever's near, the round itself too)
+      heavy.boom(end.map((c, k) => c - dir[k] * 0.15), d.blast.r, d.blast.dmg, d.name, true, 'mini');
+      if (hit.box.tag !== 'bot' && hit.box.tag !== 'dummy') blastWalls(end, d.blast.r * 0.45, 120);
+    }
     if (i === 0 && online.active) online.myShot(muzzle, end);
     if (!hit) continue;
     const b = hit.box;
@@ -486,8 +484,8 @@ function fire(w) {
 const RAIL_COL = [0.35, 0.85, 1];
 function railFx(muzzle, end, dir, hit, d) {
   const L = Math.hypot(end[0] - muzzle[0], end[1] - muzzle[1], end[2] - muzzle[2]);
-  effects.beam(muzzle, end, d.railBlast ? [0.75, 0.4, 1] : RAIL_COL, 1.1, 0.1);
-  const col = d.railBlast ? [0.8, 0.5, 1] : [0.55, 0.95, 1];
+  effects.beam(muzzle, end, d.blast ? [0.75, 0.4, 1] : RAIL_COL, 1.1, 0.1);
+  const col = d.blast ? [0.8, 0.5, 1] : [0.55, 0.95, 1];
   // rings spiralling out along the beam
   const up = Math.abs(dir[1]) > 0.9 ? [1, 0, 0] : [0, 1, 0], r1 = norm(cross(dir, up)), r2 = cross(dir, r1);
   for (let s = 1.2, n = 0; s < Math.min(L, 60) && n < 150; s += 0.45, n++) {
@@ -498,7 +496,7 @@ function railFx(muzzle, end, dir, hit, d) {
   effects.sparks(end, 34, col, 9, 0.7, 0.04, 2);
   effects.sparks(end, 10, [1, 1, 1], 4, 0.4, 0.07, 1);
   if (hit && hit.box.tag !== 'bot' && hit.box.tag !== 'dummy') blastWalls(end, 1.3, 200);
-  if (d.railBlast) heavy.boom(end.map((c, k) => c - dir[k] * 0.15), d.railBlast, 90, d.name, true, 'mini');
+  if (d.blast) heavy.boom(end.map((c, k) => c - dir[k] * 0.15), d.blast.r, d.blast.dmg, d.name, true, 'mini');
   sounds.railShot?.();
   player.shake = Math.max(player.shake || 0, 0.7);
   fovKick = 9;
@@ -1790,6 +1788,43 @@ function findBench() {
   const to = [c[0] - eye[0], 1.0 - eye[1] + c[1], c[2] + 0.4 - eye[2]];
   return Math.hypot(...to) < 3.0 && dot(norm(to), fwd) > 0.4;
 }
+// ---- armoury panels: E takes the gun; E on the gun you're already holding spins the panel round to its variant
+// (and hands it over as it comes round)
+function useRack(c) {
+  const slot = SIDEARMS.includes(c.def.id) ? 1 : 0;
+  if (slots[slot]?.def.id === c.def.id && c.vid) {
+    if (c.flip()) { c.give = 0.42; sounds.rackSpin?.(); }
+  } else pickUp(c.def);
+}
+function updateRacks(dt) {
+  for (const c of cases) {
+    c.update?.(dt);
+    if (c.give > 0 && (c.give -= dt) <= 0) { c.give = 0; pickUp(c.def); }
+  }
+}
+// the info card that pops up beside the crosshair when you look at a gun on the wall
+let tipEl = null, tipKey = '';
+const STAT_ROWS = ['DAMAGE', 'FIRE RATE', 'RANGE', 'ACCURACY', 'HANDLING', 'MAGAZINE'];
+function gunTip(c) {
+  if (!tipEl) { tipEl = document.createElement('div'); tipEl.id = 'gun-tip'; document.getElementById('hud').append(tipEl); }
+  if (!c) { tipEl.classList.remove('on'); tipKey = ''; return; }
+  const d = c.def, slot = SIDEARMS.includes(d.id) ? 1 : 0, holding = slots[slot]?.def.id === d.id, other = c.other;
+  const key = `${d.id}|${holding}|${c.flipT < 1}`;
+  tipEl.classList.add('on');
+  if (key === tipKey) return;
+  tipKey = key;
+  const col = `rgb(${c.col.map((v) => Math.round(v * 255)).join(',')})`;
+  const rt = ratings(d), row = (n) => { const r = rt.find((x) => x.name === n); return `<div class="gt-row"><span>${n}</span><i><b style="width:${Math.round(r.v * 100)}%"></b></i><em>${r.text || ''}</em></div>`; };
+  const isVar = !!VARIANT_OF[d.id], desc = isVar ? d.vdesc : GUN_DESC[d.id] || '';
+  const act = c.flipT < 1 ? '<div class="gt-act spin">SWITCHING…</div>'
+    : holding && other ? `<div class="gt-act"><kbd>E</kbd> SWITCH TO <b>${other.name}</b></div>`
+    : holding ? '<div class="gt-act"><kbd>E</kbd> REFILL</div>'
+    : `<div class="gt-act"><kbd>E</kbd> TAKE</div>${other ? `<div class="gt-alt">PRESS <kbd>E</kbd> AGAIN TO SWITCH TO <b>${other.name}</b></div>` : ''}`;
+  tipEl.style.setProperty('--gt', col);
+  tipEl.innerHTML = `<div class="gt-cat">${c.rack}${isVar ? ' · <span class="gt-var">VARIANT</span>' : ''}</div>
+    <div class="gt-name">${d.name}</div><div class="gt-type">${d.type}</div>
+    <div class="gt-desc">${desc}</div>${STAT_ROWS.map(row).join('')}${act}`;
+}
 function findCase() {
   const eye = player.eye(), fwd = player.forward();
   let best = null, bestDot = 0.93;
@@ -1917,11 +1952,9 @@ function updateHud(dt, fovRad) {
     hud.prompt.innerHTML = '<kbd>E</kbd> TAKE <b>AMMO</b> <span>FILL BOTH GUNS</span>';
     hud.prompt.style.opacity = 1;
   } else if (nearCase) {
-    const d = nearCase.def;
-    const nx = WEAPONS[nextInCase(d.id)], fam = gunFamily(d.id).length;
-    hud.prompt.innerHTML = `<kbd>E</kbd> ${nx.id === d.id && fam === 1 && weapon().def.id === d.id ? 'REFILL' : nx.id === d.id ? 'TAKE' : 'SWAP TO'} <b>${nx.name}</b> <span>${fam > 1 ? `${d.type} · ${fam} VERSIONS, PRESS E AGAIN` : d.type}</span>`;
-    hud.prompt.style.opacity = 1;
+    hud.prompt.style.opacity = 0;          // the gun panel's info card does the talking (see gunTip)
   } else hud.prompt.style.opacity = 0;
+  gunTip(nearCase && !nearCase.ammo && playing ? nearCase : null);
 
   hitTimer -= dt;
   if (hitTimer <= 0) hud.hitmarker.style.opacity = 0;
@@ -2182,7 +2215,7 @@ function renderShop() {
 function refreshGuns() {
   setHandLook(buildOutfit(cosmetics, classLo.cls));
   slots.forEach((w) => { const a = w.ammo; w.setDef(defFor(w.def.id)); w.ammo = Math.min(a, w.def.mag); });
-  cases.forEach((c) => { if (c.def) c.def = defFor(c.def.id); });
+  cases.forEach((c) => c.refresh?.(defFor));
   showroomKey = '';
 }
 // PLAY: matchmaking → loadout (30 s) → team intro → the arena. Once you're in a match, PLAY resumes it.
@@ -3095,6 +3128,7 @@ function frameBody(now) {
     if (input.hit('Digit1')) switchTo(0);
     if (input.hit('Digit2')) switchTo(1);
     nearCase = findCase();
+    updateRacks(dt);
     nearBench = findBench();
     const liftBtn = lookLiftButton();
     downedNear = findDowned();
@@ -3102,7 +3136,7 @@ function frameBody(now) {
     else if (liftBtn && input.hit('KeyE')) liftBtn.lift.press(liftBtn, sounds);
     else if (nearConsole() && input.hit('KeyE')) pressConsole();
     else if (nearCase?.ammo && input.hit('KeyE')) { slots.forEach((w) => { w.ammo = w.def.mag; }); sounds.magIn?.(); sounds.pickup(); }
-    else if (nearCase && input.hit('KeyE')) pickUp(nearCase.def);
+    else if (nearCase && input.hit('KeyE')) useRack(nearCase);
     else if (nearBench && input.hit('KeyE')) openBench();
     w = weapon();
     // only your class's equipped specialisation works
@@ -3331,4 +3365,4 @@ function frameBody(now) {
 requestAnimationFrame(frame);
 
 // handy for debugging from the console / automated tests
- window.game = { kf: (...a) => killFeed(...a), daily, gainXp: (n, l) => gainXp(n, l), progress, skinLive: (h, s) => { skinHeat = h; skinStreak = s; }, startTakedown, updateTakedown, findDowned, takedownParts, get td() { return td; }, get deathT() { return deathT; }, nextInCase, skinKill, redeemCode, useBuff, get buff() { return { kind: buffKind, t: buffT }; }, setThrow: (k) => { equippedThrow = k; throwCharges = 2; }, useThrowable, get throwCharges() { return throwCharges; }, get flashT() { return flashT; }, heavy, useHeavy, applyClass, useGadget, useTether, useCloak, get cloakT() { return cloakT; }, get launcherW() { return launcherW; }, gadgets, get burning() { return burning; }, lobby, online, get tdm() { return tdm; }, batches, renderer, map, ARENAS, get stadium() { return stadium; }, setArena: (i) => { stadium = ARENAS[i]; }, lifts, hooks: botHooks, updateFall, hookTarget, fallTop: () => fallTop, breakGlass, updateCombat, startMatch: (m) => startMatch(m), enterStadium, where: () => where, sr: () => showroomChar, cosmetics, refreshGuns, classLo, renderMenu, showTab, enterRange, cs: () => cutscene, botMgr, elevator, damagePlayer, pressConsole, setTimeScale: (v) => { timeScale = v; }, bench, openBench, closeBench, loadouts, applyLoadout, course, player, slots, weapon, world, stats, effects, dummies, walls, cases, input, start, setPlaying, resetRange, switchTo, pickUp, WEAPONS };
+ window.game = { kf: (...a) => killFeed(...a), daily, gainXp: (n, l) => gainXp(n, l), progress, skinLive: (h, s) => { skinHeat = h; skinStreak = s; }, startTakedown, updateTakedown, findDowned, takedownParts, get td() { return td; }, get deathT() { return deathT; }, useRack, skinKill, redeemCode, useBuff, get buff() { return { kind: buffKind, t: buffT }; }, setThrow: (k) => { equippedThrow = k; throwCharges = 2; }, useThrowable, get throwCharges() { return throwCharges; }, get flashT() { return flashT; }, heavy, useHeavy, applyClass, useGadget, useTether, useCloak, get cloakT() { return cloakT; }, get launcherW() { return launcherW; }, gadgets, get burning() { return burning; }, lobby, online, get tdm() { return tdm; }, batches, renderer, map, ARENAS, get stadium() { return stadium; }, setArena: (i) => { stadium = ARENAS[i]; }, lifts, hooks: botHooks, updateFall, hookTarget, fallTop: () => fallTop, breakGlass, updateCombat, startMatch: (m) => startMatch(m), enterStadium, where: () => where, sr: () => showroomChar, cosmetics, refreshGuns, classLo, renderMenu, showTab, enterRange, cs: () => cutscene, botMgr, elevator, damagePlayer, pressConsole, setTimeScale: (v) => { timeScale = v; }, bench, openBench, closeBench, loadouts, applyLoadout, course, player, slots, weapon, world, stats, effects, dummies, walls, cases, input, start, setPlaying, resetRange, switchTo, pickUp, WEAPONS };

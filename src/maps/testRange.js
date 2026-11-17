@@ -1,10 +1,10 @@
 // "Test Range": a white grid sandbox for checking movement and gunplay.
 // Maps are just data + a build() function, so new arenas can be dropped in later.
 import { makeBox, boxAt } from '../world.js';
-import { digitBoxes } from '../props.js';
+import { digitBoxes, blockText } from '../props.js';
 
-const WALL = [0.91, 0.91, 0.93];
-const ACCENT = [0.86, 0.87, 0.9];
+const WALL = [0.8, 0.81, 0.83];
+const ACCENT = [0.52, 0.57, 0.64];   // blue-grey steel
 const CHAR = [0.27, 0.28, 0.31];      // charcoal structure
 const RED = [0.95, 0.15, 0.1];
 const LANE = [0.82, 0.83, 0.86];
@@ -17,10 +17,16 @@ const HALF_PI = Math.PI / 2;
 const DECK_Y = -16;                       // floor height of the underground combat arena
 const CEIL_Y = DECK_Y + 13.5;              // underside of its ceiling (just below the range floor)
 const HATCH = { x0: -30, x1: -27, z0: -4.5, z1: -1.5 };   // elevator shaft opening in the range floor
+// the armoury: a roofed room behind the south wall, through a wide doorway
+const AR = { x0: -12, x1: 12, z0: 33, z1: 45, top: 4.6, door: 3.5, doorH: 4.2 };
+const CONC = [0.66, 0.665, 0.67];     // concrete blocks and barriers
+const FLOOR = [0.6, 0.61, 0.63];      // sealed concrete
+const YELLOW = [0.98, 0.76, 0.12];
+const DARKP = [0.3, 0.31, 0.34];      // painted steel (armoury walls)
 
 export default {
   name: 'TEST RANGE',
-  spawn: { pos: [0, 0, 26], yaw: Math.PI }, // facing the weapon wall
+  spawn: { pos: [0, 0, 26], yaw: Math.PI }, // facing the armoury doorway
 
   build(world) {
     const add = (b) => world.add(b);
@@ -31,12 +37,15 @@ export default {
 
     // ---------------- floor + outer walls ----------------
     // floor, with a hatch for the elevator shaft
-    add(makeBox([-S, -1, -S], [HATCH.x0, 0, S]));
-    add(makeBox([HATCH.x1, -1, -S], [S, 0, S]));
-    add(makeBox([HATCH.x0, -1, -S], [HATCH.x1, 0, HATCH.z0]));
-    add(makeBox([HATCH.x0, -1, HATCH.z1], [HATCH.x1, 0, S]));
+    add(makeBox([-S, -1, -S], [HATCH.x0, 0, S], { color: FLOOR }));
+    add(makeBox([HATCH.x1, -1, -S], [S, 0, S], { color: FLOOR }));
+    add(makeBox([HATCH.x0, -1, -S], [HATCH.x1, 0, HATCH.z0], { color: FLOOR }));
+    add(makeBox([HATCH.x0, -1, HATCH.z1], [HATCH.x1, 0, S], { color: FLOOR }));
     add(makeBox([-S - 1, 0, -S - 1], [S + 1, H, -S], { color: WALL }));
-    add(makeBox([-S - 1, 0, S], [S + 1, H, S + 1], { color: WALL }));
+    // south wall, with the armoury doorway in the middle
+    add(makeBox([-S - 1, 0, S], [-AR.door, H, S + 1], { color: WALL }));
+    add(makeBox([AR.door, 0, S], [S + 1, H, S + 1], { color: WALL }));
+    add(makeBox([-AR.door, AR.doorH, S], [AR.door, H, S + 1], { color: WALL }));
     add(makeBox([-S - 1, 0, -S], [-S, H, S], { color: WALL }));
     add(makeBox([S, 0, -S], [S + 1, H, GZ0], { color: WALL }));     // east wall, split by the
     add(makeBox([S, 0, GZ1], [S + 1, H, S], { color: WALL }));      // parkour doorway
@@ -47,9 +56,9 @@ export default {
       { a: 2, fixed: -S, sign: 1 }, { a: 2, fixed: S, sign: -1 },
     ];
     for (const w of walls) {
-      const east = w.a === 2 && w.fixed === S;
+      const east = w.a === 2 && w.fixed === S, south = w.a === 0 && w.fixed === S;
       const band = (y0, y1, depth, o) => {
-        for (const [a0, a1] of east ? [[-S, GZ0], [GZ1, S]] : [[-S, S]]) {
+        for (const [a0, a1] of east ? [[-S, GZ0], [GZ1, S]] : south ? [[-S, -AR.door], [AR.door, S]] : [[-S, S]]) {
           const min = [0, y0, 0], max = [0, y1, 0];
           const across = w.a === 0 ? 2 : 0;
           min[w.a] = a0; max[w.a] = a1;
@@ -85,13 +94,17 @@ export default {
     // ---------------- shooting lanes (north) ----------------
     add(boxAt(-10, 0, -14, 0.4, 1.2, 24, { color: ACCENT }));
     add(boxAt(10, 0, -14, 0.4, 1.2, 24, { color: ACCENT }));
-    add(boxAt(0, 0, -27, 20.4, 4, 1));
-    deco([-9.8, 0, -26.5], [9.8, 0.02, -1.2], { color: LANE, grid: true, edges: false });   // lane floor
+    // the backstop: a dark rubber-faced berm with angled deflector plates and a sign over it
+    add(boxAt(0, 0, -27, 20.4, 4, 1, { color: [0.2, 0.18, 0.16], grid: false }));
+    for (let x = -9; x <= 9; x += 2) deco([x - 0.95, 0.2, -26.55], [x + 0.95, 3.8, -26.5], { color: x % 4 ? [0.24, 0.21, 0.18] : [0.27, 0.24, 0.2] });
+    deco([-10.2, 3.9, -26.56], [10.2, 4.0, -26.5], { color: YELLOW, emissive: 0.4 });
+    add(boxAt(0, 4, -27.2, 12, 1.6, 0.4, { color: [0.12, 0.12, 0.14], grid: false }));
+    blockText('FIRING RANGE', 0, 4.8, -27.01, 0.85, 's', [1, 0.8, 0.2], 0.9).forEach(add);
+    deco([-9.8, 0, -26.5], [9.8, 0.02, -1.2], { color: [0.36, 0.37, 0.4], grid: true, edges: false });   // lane floor: dark asphalt
+    for (const z of [-6, -11, -16, -21]) deco([-9.8, 0, z - 0.04], [9.8, 0.026, z + 0.04], { color: [0.92, 0.92, 0.9], emissive: 0.1, edges: false });   // every 5 m
     deco([-9.8, 0, -1.2], [9.8, 0.03, -0.95], { color: RED, emissive: 0.7, edges: false }); // firing line
     for (const x of [-5, 0, 5]) deco([x - 0.04, 0, -26.5], [x + 0.04, 0.025, -1.2], { color: CHAR, edges: false });
-    add(boxAt(0, 0, -0.5, 6, 1.0, 0.6, { color: ACCENT }));
-    add(boxAt(-6, 0, -0.5, 2, 1.4, 0.6));
-    add(boxAt(6, 0, -0.5, 2, 1.4, 0.6));
+    buildBooths(add, deco);
 
     // overhead trusses over the lanes (great for shadows)
     add(boxAt(-10.7, 0, -14, 0.5, 7, 0.5, { color: CHAR, grid: false }));
@@ -111,11 +124,11 @@ export default {
     digitBoxes('25', -1.0, 1.4, -26.48, 1.6, 1, CHAR).forEach(add);
 
     // ---------------- step test near spawn (east): 0.25 / 0.5 / 0.75 / 1.0 ----------------
-    [0.25, 0.5, 0.75, 1.0].forEach((h, i) => add(boxAt(6 + i * 2.2, 0, 18, 2, h, 2)));
+    [0.25, 0.5, 0.75, 1.0].forEach((h, i) => add(boxAt(6 + i * 2.2, 0, 18, 2, h, 2, { color: CONC })));
 
     // ---------------- stair platform (east) ----------------
     const px = 20, pz = 4;
-    add(boxAt(px, 0, pz - 4, 8, 3, 8));
+    add(boxAt(px, 0, pz - 4, 8, 3, 8, { color: CONC }));
     for (let i = 0; i < 6; i++) add(boxAt(px, 0, pz + 0.3 + i * 0.6, 3, 3 - i * 0.5, 0.6, { color: ACCENT }));
     add(boxAt(px - 3.2, 3, pz - 7.5, 1.6, 1.1, 0.3, { color: CHAR, grid: false }));
     add(boxAt(px + 3.2, 3, pz - 7.5, 1.6, 1.1, 0.3, { color: CHAR, grid: false }));
@@ -125,18 +138,18 @@ export default {
     const tx = -22, tz = 6;
     [[0, 1.0], [2.4, 2.0], [4.8, 3.0], [7.2, 4.0], [9.6, 5.0]].forEach(([dz, h], i) =>
       add(boxAt(tx + 4, 0, tz + 10 - dz, 2, h, 2, { color: i % 2 ? ACCENT : WALL })));
-    add(boxAt(tx, 0, tz - 2, 5, 6, 5));
+    add(boxAt(tx, 0, tz - 2, 5, 6, 5, { color: CONC }));
     add(boxAt(tx - 2.2, 6, tz - 2, 0.6, 1.1, 5, { color: CHAR, grid: false }));
     deco([tx - 2.5, 5.98, tz + 0.45], [tx + 2.5, 6.04, tz + 0.55], { color: RED, emissive: 0.7 });
     // a tall mantle wall next to the tower (2m)
     add(boxAt(tx + 7, 0, tz - 6, 4, 2.0, 1.2, { color: ACCENT }));
 
     // ---------------- cover pieces ----------------
-    add(boxAt(-5, 0, 10, 3, 1.2, 1));
+    add(boxAt(-5, 0, 10, 3, 1.2, 1, { color: CONC }));
     add(boxAt(5, 0, 8, 1, 2.6, 3, { color: CHAR, grid: false }));
     add(boxAt(0, 0, 4, 1.2, 3.2, 1.2, { color: WALL }));
-    add(boxAt(-14, 0, 18, 4, 2.2, 0.6));
-    add(boxAt(14, 0, 13, 0.6, 2.2, 4));
+    add(boxAt(-14, 0, 18, 4, 2.2, 0.6, { color: CONC }));
+    add(boxAt(14, 0, 13, 0.6, 2.2, 4, { color: CONC }));
     add(boxAt(-24, 0, 24, 6, 0.6, 6, { color: ACCENT }));
     add(boxAt(24, 0, -20, 3, 7, 3, { color: CHAR, grid: false }));
     add(boxAt(-24, 0, -18, 2, 1.6, 6, { color: ACCENT }));    // mantle-height block
@@ -144,23 +157,56 @@ export default {
 
     // a low tunnel to slide under
     add(boxAt(-16, 1.3, -4, 4, 0.5, 6, { color: CHAR, grid: false }));
-    add(boxAt(-17.8, 0, -4, 0.4, 1.3, 6));
-    add(boxAt(-14.2, 0, -4, 0.4, 1.3, 6));
+    add(boxAt(-17.8, 0, -4, 0.4, 1.3, 6, { color: CONC }));
+    add(boxAt(-14.2, 0, -4, 0.4, 1.3, 6, { color: CONC }));
 
-    // ---------------- weapon wall (south) ----------------
-    deco([-5, 0, 28.6], [5, 0.02, 31.8], { color: [0.3, 0.31, 0.34], edges: false });
-    deco([-5, 0, 28.45], [5, 0.03, 28.6], { color: RED, emissive: 0.7, edges: false });
+    // ---------------- armoury (south, through the doorway) ----------------
+    buildArmoury(add, deco, S);
     // spawn pad
     deco([-1.5, 0, 24.5], [1.5, 0.02, 27.5], { color: LANE, edges: true });
+
+    // painted floor zones: each area gets a tinted pad with a yellow border, and a walkway from spawn to the armoury
+    const zone = (x0, z0, x1, z1, col) => {
+      deco([x0, 0, z0], [x1, 0.008, z1], { color: col, edges: false });
+      for (const [a0, b0, a1, b1] of [[x0, z0, x1, z0 + 0.12], [x0, z1 - 0.12, x1, z1], [x0, z0, x0 + 0.12, z1], [x1 - 0.12, z0, x1, z1]]) deco([a0, 0, b0], [a1, 0.012, b1], { color: YELLOW, emissive: 0.2, edges: false });
+    };
+    zone(-28, -1, -12, 15, [0.45, 0.52, 0.62]);      // movement (tower, mantle wall, tunnel)
+    zone(14, -6, 26, 9, [0.45, 0.52, 0.62]);         // stairs
+    zone(4.6, 16.4, 13.6, 19.6, [0.55, 0.52, 0.42]); // step test
+    deco([-2.2, 0, 27.6], [2.2, 0.008, S], { color: [0.36, 0.37, 0.4], edges: false });
+    for (const sx of [-1, 1]) deco([sx * 2.2 - 0.06, 0, 27.6], [sx * 2.2 + 0.06, 0.012, S], { color: YELLOW, emissive: 0.2, edges: false });
+    for (let z = 28; z < S - 0.5; z += 1.2) deco([-0.35, 0, z], [0.35, 0.012, z + 0.5], { color: [0.95, 0.95, 0.92], emissive: 0.1, edges: false });   // arrows in
+
+    // zone signs high on the walls
+    const sign = (text, x, y, z, face, w) => {
+      const o = { n: [0, -0.15], s: [0, 0.15], e: [0.15, 0], w: [-0.15, 0] }[face];
+      add(boxAt(x + o[0] * 0.5, y - 0.75, z + o[1] * 0.5, face === 'e' || face === 'w' ? 0.15 : w, 1.5, face === 'e' || face === 'w' ? w : 0.15, { color: [0.12, 0.12, 0.14], grid: false }));
+      blockText(text, x + o[0] * 1.05, y, z + o[1] * 1.05, 0.7, face, [1, 1, 1], 0.85).forEach(add);
+    };
+    sign('PARKOUR', S - 0.02, 6.2, (GZ0 + GZ1) / 2, 'w', 6.4);
+    sign('MOVEMENT', -S + 0.02, 6.2, 8, 'e', 7.2);
+    sign('COMBAT DECK', -S + 0.02, 6.2, -10, 'e', 9.6);
 
     buildParkour(add, deco, H);
     this.deckRefs = buildDeck(add, deco);
     this.showroomRefs = buildShowroom(add);
   },
 
-  // (the guns now sit in two crates either side of the workbench, built in props.js)
-  cases: { z: 31.15, xs: [-27.6, -23, -18.4, -13.8, -9.2, -4.6, 4.6, 9.2, 13.8, 18.4, 23] },
-  bench: { pos: [0, 0, 30.6] },            // gunsmith workbench (front edge), in the middle of the weapon stands
+  // the armoury: every gun on a panel on the walls (the panels are built in props.js gunWalls). Each rack: centre of
+  // the row, the way the wall faces, which guns, panel width, spacing, colour. `ammo` is the ammo station.
+  armoury: {
+    room: [AR.x0, AR.z0, AR.x1, AR.z1, AR.top],
+    racks: [
+      { name: 'RIFLES', o: [-6.8, 2.35, AR.z1], n: [0, -1], fam: 'ar', w: 1.32, gap: 1.55, col: [0.95, 0.3, 0.12] },
+      { name: 'SMGS', o: [-6.8, 1.3, AR.z1], n: [0, -1], fam: 'smg', w: 0.8, gap: 1.8, col: [0.2, 0.75, 1] },
+      { name: 'SHOTGUNS', o: [6.8, 2.35, AR.z1], n: [0, -1], fam: 'shotgun', w: 1.26, gap: 1.8, col: [1, 0.72, 0.1] },
+      { name: 'SNIPERS', o: [6.8, 1.3, AR.z1], n: [0, -1], fam: 'sniper', w: 1.45, gap: 2.2, col: [0.4, 1, 0.45] },
+      { name: 'MACHINE GUNS', o: [AR.x0, 1.75, 40], n: [1, 0], fam: 'lmg', w: 1.4, gap: 2.25, col: [0.9, 0.2, 0.25] },
+      { name: 'SIDEARMS', o: [AR.x1, 1.6, 41.2], n: [-1, 0], fam: 'pistol', w: 0.55, gap: 0.85, col: [0.75, 0.45, 1] },
+    ],
+    ammo: [AR.x1 - 0.45, 1.15, 35.4],
+  },
+  bench: { pos: [0, 0, AR.z1 - 1.1] },     // gunsmith workbench (front edge), against the armoury's back wall
 
   dummies: [
     { pos: [-6, 0, -8] },
@@ -424,4 +470,93 @@ function buildShowroom(add) {
   // floor strips leading to the turntable
   for (const sx of [-1, 1]) ring.push(box([X + sx * 2.4 - 0.05, Y, Z - 10], [X + sx * 2.4 + 0.05, Y + 0.012, Z + 5], { color: [0.92, 0.1, 0.08], emissive: 0.8, solid: false, noShadow: true }));
   return { panels, bars, ring };
+}
+
+// ---------------------------------------------------------------- armoury
+// A roofed room behind the south wall: dark painted walls with racks of guns, a polished floor with a walkway,
+// lamp strips in the ceiling, the gunsmith's bench on the back wall, an ammo station by the door, signs over it all.
+function buildArmoury(add, deco, S) {
+  const box = (min, max, o = {}) => add(makeBox(min, max, { grid: false, ...o }));
+  const { x0, x1, z0, z1, top, door, doorH } = AR;
+  // floor, walls, roof
+  box([x0 - 1, -1, S], [x1 + 1, 0, z1 + 1], { color: [0.24, 0.25, 0.27] });
+  box([x0 - 1, 0, z1], [x1 + 1, top + 0.6, z1 + 1], { color: DARKP });
+  box([x0 - 1, 0, S + 1], [x0, top + 0.6, z1], { color: DARKP });
+  box([x1, 0, S + 1], [x1 + 1, top + 0.6, z1], { color: DARKP });
+  box([x0 - 1, top, S], [x1 + 1, top + 0.6, z1 + 1], { color: [0.12, 0.12, 0.14], noShadow: true });
+  // the doorway: a steel frame, yellow-and-black hazard stripes down both sides, and a sign over it on the range side
+  for (const sx of [-1, 1]) {
+    box([sx * door - 0.15, 0, S - 0.12], [sx * door + 0.15, doorH, S + 1.02], { color: [0.2, 0.2, 0.22], mat: 'metal' });
+    for (let k = 0; k < 8; k++) deco([sx * door - 0.16, k * 0.5, S - 0.13], [sx * door + 0.16, k * 0.5 + 0.25, S - 0.12], { color: YELLOW, emissive: 0.15 });
+  }
+  box([-door - 0.15, doorH - 0.2, S - 0.12], [door + 0.15, doorH, S + 1.02], { color: [0.2, 0.2, 0.22], mat: 'metal' });
+  box([-3.2, doorH + 0.25, S - 0.08], [3.2, doorH + 1.45, S], { color: [0.1, 0.1, 0.12] });
+  blockText('ARMOURY', 0, doorH + 0.85, S - 0.09, 0.62, 'n', [1, 0.8, 0.2], 0.9).forEach(add);
+  deco([-3.2, doorH + 0.22, S - 0.1], [3.2, doorH + 0.27, S - 0.08], { color: [1, 0.8, 0.2], emissive: 0.9 });
+  // floor: a lighter walkway down the middle, a yellow line round the racks, the bench mat
+  deco([-2.4, 0, S], [2.4, 0.012, z1 - 1.3], { color: [0.33, 0.34, 0.37], edges: false });
+  for (const sx of [-1, 1]) deco([sx * 2.4 - 0.04, 0, S], [sx * 2.4 + 0.04, 0.016, z1 - 1.3], { color: YELLOW, emissive: 0.25, edges: false });
+  deco([x0 + 1.2, 0, z1 - 1.25], [x1 - 1.2, 0.016, z1 - 1.17], { color: YELLOW, emissive: 0.25, edges: false });
+  // walls: a dado rail and a lighter upper band, skirting
+  for (const [a, b, c, d] of [[x0, z1 - 0.06, x1, z1], [x0, S + 1, x0 + 0.06, z1], [x1 - 0.06, S + 1, x1, z1]]) {
+    deco([a, 0, b], [c, 0.3, d], { color: [0.1, 0.1, 0.11] });
+    deco([a, 3.05, b], [c, 3.12, d], { color: [0.35, 0.36, 0.4], mat: 'metal' });
+    deco([a, 3.12, b], [c, top, d], { color: [0.4, 0.41, 0.44] });
+  }
+  // the roof: steel beams across and three lamp strips (they light the room: see uRoom in the renderer)
+  for (let z = S + 2; z < z1; z += 3) box([x0, top - 0.3, z - 0.12], [x1, top, z + 0.12], { color: [0.2, 0.2, 0.22], solid: false, mat: 'metal' });
+  for (const x of [-7, 0, 7]) {
+    deco([x - 0.35, top - 0.36, S + 1.5], [x + 0.35, top - 0.3, z1 - 0.5], { color: [0.15, 0.15, 0.16], mat: 'metal' });
+    deco([x - 0.25, top - 0.38, S + 1.6], [x + 0.25, top - 0.36, z1 - 0.6], { color: [1, 0.97, 0.9], emissive: 1, noShadow: true });
+  }
+  // rack backboards (the panels hang in front of these) and a sign over each group
+  const back = (min, max) => deco(min, max, { color: [0.2, 0.21, 0.23], mat: 'paint' });
+  back([-11.7, 0.85, z1 - 0.05], [-1.9, 2.8, z1]);
+  back([1.9, 0.85, z1 - 0.05], [11.7, 2.8, z1]);
+  back([x0, 0.95, 35.4], [x0 + 0.05, 2.55, 44.6]);
+  back([x1 - 0.05, 1.15, 38.9], [x1, 2.05, 43.5]);
+  blockText('RIFLES + SMGS', -6.8, 3.55, z1 - 0.07, 0.36, 'n', [1, 1, 1], 0.7).forEach(add);
+  blockText('SHOTGUNS + SNIPERS', 6.8, 3.55, z1 - 0.07, 0.36, 'n', [1, 1, 1], 0.7).forEach(add);
+  blockText('MACHINE GUNS', x0 + 0.07, 3.55, 40, 0.36, 'e', [1, 1, 1], 0.7).forEach(add);
+  blockText('SIDEARMS', x1 - 0.07, 2.55, 41.2, 0.26, 'w', [1, 1, 1], 0.7).forEach(add);
+  blockText('GUNSMITH', 0, 3.55, z1 - 0.07, 0.3, 'n', [1, 0.8, 0.2], 0.8).forEach(add);
+  // ammo station by the door: shelves of cans and a lit sign
+  const ax = x1 - 0.45, az = 35.4;
+  box([ax - 0.4, 0, az - 1.1], [ax + 0.4, 0.95, az + 1.1], { color: [0.29, 0.33, 0.2], mat: 'paint' });
+  for (let k = 0; k < 4; k++) {
+    box([ax - 0.3, 0.95, az - 0.95 + k * 0.5], [ax + 0.15, 1.15, az - 0.65 + k * 0.5], { color: [0.24, 0.27, 0.16], mat: 'paint', solid: false });
+    deco([ax - 0.31, 1.03, az - 0.95 + k * 0.5], [ax + 0.16, 1.06, az - 0.65 + k * 0.5], { color: YELLOW, emissive: 0.1 });
+  }
+  box([ax + 0.3, 1.5, az - 0.8], [ax + 0.45, 2.1, az + 0.8], { color: [0.1, 0.1, 0.12] });
+  blockText('AMMO', ax + 0.29, 1.8, az, 0.36, 'w', [0.4, 1, 0.45], 0.9).forEach(add);
+  // crates stacked in the corners
+  for (const [cx, cz, h] of [[x0 + 0.7, S + 1.8, 0.8], [x0 + 0.7, S + 2.8, 0.8], [x0 + 0.7, S + 2.3, 1.6]]) box([cx - 0.5, h - 0.8, cz - 0.45], [cx + 0.5, h, cz + 0.45], { color: [0.29, 0.33, 0.2], mat: 'paint', tex: 12 });
+}
+
+// ---------------------------------------------------------------- shooting booths
+// Four lanes, each with a booth at the firing line: sound-baffle partitions between them (with the lane number on
+// top), a counter to lean on, a lamp hood overhead and a box of mags on the counter.
+function buildBooths(add, deco) {
+  const box = (min, max, o = {}) => add(makeBox(min, max, { grid: false, ...o }));
+  const P1 = [0.3, 0.32, 0.36], PAD = [0.42, 0.44, 0.5];
+  for (const x of [-10, -5, 0, 5, 10]) {
+    box([x - 0.06, 0, -1.4], [x + 0.06, 2.3, 1.2], { color: P1, mat: 'metal' });
+    for (const sx of [-1, 1]) deco([x + sx * 0.06, 0.4, -1.25], [x + sx * 0.075, 2.1, 1.05], { color: PAD, mat: 'cloth' });   // acoustic pads
+    deco([x - 0.065, 2.3, -1.42], [x + 0.065, 2.36, 1.22], { color: YELLOW, emissive: 0.3 });
+  }
+  [-7.5, -2.5, 2.5, 7.5].forEach((x, i) => {
+    // the counter: a steel frame and a worn wooden top, a mag box on it
+    box([x - 1.6, 0, -1.25], [x + 1.6, 1.0, -0.9], { color: [0.26, 0.27, 0.3], mat: 'metal' });
+    box([x - 1.65, 1.0, -1.3], [x + 1.65, 1.06, -0.75], { color: [0.45, 0.35, 0.24], mat: 'wood' });
+    box([x + 1.2, 1.06, -1.15], [x + 1.6, 1.16, -0.9], { color: [0.29, 0.33, 0.2], mat: 'paint', solid: false });
+    // lamp hood and the lane number on a plate above it
+    box([x - 1.6, 2.6, -1.4], [x + 1.6, 2.75, 0.4], { color: [0.18, 0.18, 0.2], mat: 'metal', solid: false });
+    deco([x - 1.4, 2.58, -1.2], [x + 1.4, 2.6, 0.2], { color: [1, 0.97, 0.9], emissive: 1, noShadow: true });
+    box([x - 0.5, 2.75, -1.42], [x + 0.5, 3.45, -1.36], { color: [0.12, 0.12, 0.14] });
+    digitBoxes(String(i + 1), x - 0.15, 2.85, -1.335, 0.5, 1, [1, 0.8, 0.2], 0.9).forEach(add);
+    // lane number painted big on the floor just past the line
+    deco([x - 0.6, 0, -3.2], [x + 0.6, 0.024, -2.0], { color: [0.3, 0.31, 0.34], edges: false });
+  });
+  // the walkway behind the booths: yellow edge lines
+  deco([-10, 0, 1.2], [10, 0.02, 1.3], { color: YELLOW, emissive: 0.25, edges: false });
 }

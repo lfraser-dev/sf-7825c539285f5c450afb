@@ -668,6 +668,28 @@ p.fx { color: #cfd3da; font-size: 12px; line-height: 1.4; margin: 6px 0 10px; }
   #matchend { place-items: center start; padding-left: 5vw; background: linear-gradient(90deg, rgba(6,6,8,.95) 0%, rgba(6,6,8,.9) 40%, rgba(6,6,8,.3) 58%, rgba(6,6,8,0) 78%); }
 }
 body:has(#matchend:not(.hidden)) .mm-page { visibility: hidden; }
+  /* armoury: the info card beside the crosshair when you look at a gun on the wall */
+  #gun-tip { position: absolute; left: calc(50% + 150px); top: 50%; transform: translate(12px, -50%); width: 300px; background: rgba(12,14,19,.92);
+    border-left: 4px solid var(--gt, #ff4a40); color: #fff; padding: 12px 14px 12px; font-family: var(--font); opacity: 0; pointer-events: none;
+    transition: opacity .15s, transform .15s; box-shadow: 0 8px 30px rgba(0,0,0,.4); }
+  #gun-tip.on { opacity: 1; transform: translate(0, -50%); }
+  #gun-tip .gt-cat { font: 800 11px var(--font); letter-spacing: .16em; color: var(--gt); }
+  #gun-tip .gt-var { color: #ffd04a; }
+  #gun-tip .gt-name { font: 900 italic 26px var(--font); letter-spacing: .02em; line-height: 1.05; margin-top: 3px; }
+  #gun-tip .gt-type { font: 700 12px var(--font); letter-spacing: .12em; opacity: .6; margin-bottom: 7px; }
+  #gun-tip .gt-desc { font: 500 13px/1.35 var(--font); opacity: .88; margin-bottom: 9px; }
+  #gun-tip .gt-row { display: grid; grid-template-columns: 92px 1fr 66px; align-items: center; gap: 8px; font: 700 11px var(--font); letter-spacing: .06em; margin: 3px 0; }
+  #gun-tip .gt-row span { opacity: .65; }
+  #gun-tip .gt-row i { height: 5px; background: rgba(255,255,255,.12); display: block; }
+  #gun-tip .gt-row i b { display: block; height: 100%; background: var(--gt); }
+  #gun-tip .gt-row em { font-style: normal; text-align: right; opacity: .8; }
+  #gun-tip .gt-act { margin-top: 10px; font: 800 14px var(--font); letter-spacing: .06em; }
+  #gun-tip .gt-act b, #gun-tip .gt-alt b { color: #ffd04a; font-style: italic; }
+  #gun-tip .gt-act.spin { color: #ffd04a; animation: gtblink .3s steps(2) infinite; }
+  #gun-tip .gt-alt { margin-top: 5px; font: 700 11px var(--font); letter-spacing: .06em; opacity: .7; }
+  #gun-tip kbd { background: #fff; color: #111; font: 800 12px var(--font); padding: 1px 6px; margin-right: 4px; }
+  @keyframes gtblink { 50% { opacity: .4; } }
+  @media (max-width: 760px) { #gun-tip { left: auto; right: 12px; width: 240px; } }
 </style>
 </head>
 <body>
@@ -782,7 +804,7 @@ body:has(#matchend:not(.hidden)) .mm-page { visibility: hidden; }
 
   <section class="mm-page mm-home" data-page="home">
     <div class="mm-col mm-home-left">
-      <div class="mm-kicker">SEASON 1 · BUILD 0.62</div>
+      <div class="mm-kicker">SEASON 1 · BUILD 0.63</div>
       <button class="mm-big" id="mm-play" type="button">
         <span class="mm-big-t">PLAY</span>
         <span class="mm-big-s" id="mm-play-sub">SEMI-FINALS · FIND A MATCH</span>
@@ -896,43 +918,43 @@ body:has(#matchend:not(.hidden)) .mm-page { visibility: hidden; }
 <script type="importmap">
 {
  "imports": {
-  "./src/attachments.js": "./src/attachments.js?v=0.62-1794918586",
-  "./src/audio.js": "./src/audio.js?v=0.62-1794918586",
-  "./src/batch.js": "./src/batch.js?v=0.62-1794918586",
-  "./src/bench.js": "./src/bench.js?v=0.62-1794918586",
-  "./src/bots.js": "./src/bots.js?v=0.62-1794918586",
-  "./src/challenges.js": "./src/challenges.js?v=0.62-1794918586",
-  "./src/classes.js": "./src/classes.js?v=0.62-1794918586",
-  "./src/contestant.js": "./src/contestant.js?v=0.62-1794918586",
-  "./src/cosmetics.js": "./src/cosmetics.js?v=0.62-1794918586",
-  "./src/course.js": "./src/course.js?v=0.62-1794918586",
-  "./src/effects.js": "./src/effects.js?v=0.62-1794918586",
-  "./src/elevator.js": "./src/elevator.js?v=0.62-1794918586",
-  "./src/fighter.js": "./src/fighter.js?v=0.62-1794918586",
-  "./src/gadgets.js": "./src/gadgets.js?v=0.62-1794918586",
-  "./src/heavy.js": "./src/heavy.js?v=0.62-1794918586",
-  "./src/input.js": "./src/input.js?v=0.62-1794918586",
-  "./src/main.js": "./src/main.js?v=0.62-1794918586",
-  "./src/maps/arenas.js": "./src/maps/arenas.js?v=0.62-1794918586",
-  "./src/maps/testRange.js": "./src/maps/testRange.js?v=0.62-1794918586",
-  "./src/matchmaking.js": "./src/matchmaking.js?v=0.62-1794918586",
-  "./src/math.js": "./src/math.js?v=0.62-1794918586",
-  "./src/nav.js": "./src/nav.js?v=0.62-1794918586",
-  "./src/net.js": "./src/net.js?v=0.62-1794918586",
-  "./src/player.js": "./src/player.js?v=0.62-1794918586",
-  "./src/progress.js": "./src/progress.js?v=0.62-1794918586",
-  "./src/props.js": "./src/props.js?v=0.62-1794918586",
-  "./src/renderer.js": "./src/renderer.js?v=0.62-1794918586",
-  "./src/rig.js": "./src/rig.js?v=0.62-1794918586",
-  "./src/takedown.js": "./src/takedown.js?v=0.62-1794918586",
-  "./src/tdm.js": "./src/tdm.js?v=0.62-1794918586",
-  "./src/thumbs.js": "./src/thumbs.js?v=0.62-1794918586",
-  "./src/weapon.js": "./src/weapon.js?v=0.62-1794918586",
-  "./src/weapons.js": "./src/weapons.js?v=0.62-1794918586",
-  "./src/world.js": "./src/world.js?v=0.62-1794918586"
+  "./src/attachments.js": "./src/attachments.js?v=0.63-1794921587",
+  "./src/audio.js": "./src/audio.js?v=0.63-1794921587",
+  "./src/batch.js": "./src/batch.js?v=0.63-1794921587",
+  "./src/bench.js": "./src/bench.js?v=0.63-1794921587",
+  "./src/bots.js": "./src/bots.js?v=0.63-1794921587",
+  "./src/challenges.js": "./src/challenges.js?v=0.63-1794921587",
+  "./src/classes.js": "./src/classes.js?v=0.63-1794921587",
+  "./src/contestant.js": "./src/contestant.js?v=0.63-1794921587",
+  "./src/cosmetics.js": "./src/cosmetics.js?v=0.63-1794921587",
+  "./src/course.js": "./src/course.js?v=0.63-1794921587",
+  "./src/effects.js": "./src/effects.js?v=0.63-1794921587",
+  "./src/elevator.js": "./src/elevator.js?v=0.63-1794921587",
+  "./src/fighter.js": "./src/fighter.js?v=0.63-1794921587",
+  "./src/gadgets.js": "./src/gadgets.js?v=0.63-1794921587",
+  "./src/heavy.js": "./src/heavy.js?v=0.63-1794921587",
+  "./src/input.js": "./src/input.js?v=0.63-1794921587",
+  "./src/main.js": "./src/main.js?v=0.63-1794921587",
+  "./src/maps/arenas.js": "./src/maps/arenas.js?v=0.63-1794921587",
+  "./src/maps/testRange.js": "./src/maps/testRange.js?v=0.63-1794921587",
+  "./src/matchmaking.js": "./src/matchmaking.js?v=0.63-1794921587",
+  "./src/math.js": "./src/math.js?v=0.63-1794921587",
+  "./src/nav.js": "./src/nav.js?v=0.63-1794921587",
+  "./src/net.js": "./src/net.js?v=0.63-1794921587",
+  "./src/player.js": "./src/player.js?v=0.63-1794921587",
+  "./src/progress.js": "./src/progress.js?v=0.63-1794921587",
+  "./src/props.js": "./src/props.js?v=0.63-1794921587",
+  "./src/renderer.js": "./src/renderer.js?v=0.63-1794921587",
+  "./src/rig.js": "./src/rig.js?v=0.63-1794921587",
+  "./src/takedown.js": "./src/takedown.js?v=0.63-1794921587",
+  "./src/tdm.js": "./src/tdm.js?v=0.63-1794921587",
+  "./src/thumbs.js": "./src/thumbs.js?v=0.63-1794921587",
+  "./src/weapon.js": "./src/weapon.js?v=0.63-1794921587",
+  "./src/weapons.js": "./src/weapons.js?v=0.63-1794921587",
+  "./src/world.js": "./src/world.js?v=0.63-1794921587"
  }
 }
 </script>
-<script type="module" src="src/main.js?v=0.62-1794918586"></script>
+<script type="module" src="src/main.js?v=0.63-1794921587"></script>
 </body>
 </html>

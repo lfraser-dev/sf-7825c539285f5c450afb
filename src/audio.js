@@ -67,6 +67,11 @@ export class Sounds {
   shell() { this.click(2600, 0.22, 3); }
   cloth() { this.burst(0.15, 1200, 0.07); }
   swap() { this.burst(0.12, 1500, 0.1); setTimeout(() => this.click(3000, 0.18), 120); }
+  // an armoury panel spinning round: a motor whirr, then a heavy clunk as it locks
+  rackSpin() {
+    this.tone(140, 420, 0.5, 0.07, 'sawtooth'); this.burst(0.5, 700, 0.05, 'bandpass', 2);
+    setTimeout(() => { this.tone(180, 60, 0.18, 0.3); this.click(900, 0.3, 2); this.burst(0.12, 2500, 0.12, 'highpass'); }, 600);
+  }
   pickup() { this.tone(600, 1200, 0.12, 0.12, 'triangle'); this.click(2600, 0.25); }
   slide() { this.burst(0.55, 900, 0.22); this.burst(0.3, 3000, 0.06, 'highpass'); }
   vault() { this.burst(0.14, 800, 0.2); this.click(1100, 0.14, 2); setTimeout(() => this.burst(0.2, 1600, 0.08), 90); }

@@ -51,6 +51,8 @@ in vec4 vLightPos;
 in float vViewZ;
 uniform vec3 uFogColor, uSunDir, uCamPos, uSkyTop;
 uniform float uFogDensity, uShadowOn, uSky, uViewUnder, uTime;
+uniform vec4 uRoom;     // a roofed room above ground (x0, z0, x1, z1), lit by its own lamps: the test-range armoury
+uniform float uRoomTop;
 uniform vec3 uRim;
 // per-draw values arrive from the vertex shader (uniforms for single draws, instance data for batches)
 flat in vec3 fColor, fScale, fMat;   // fMat: x = metalness, y = roughness (< 0: automatic from colour), z = AO
@@ -633,7 +635,8 @@ void main() {
 
   vec3 albedo = toLin(base) * (world ? 0.82 : 1.0);   // real-world whites are greyer than paper
   vec3 V = normalize(uCamPos - vWorld);
-  bool indoor = world ? vWorld.y < UNDER_Y : uViewUnder > 0.5;
+  bool inRoom = vWorld.x > uRoom.x && vWorld.x < uRoom.z && vWorld.z > uRoom.y && vWorld.z < uRoom.w && vWorld.y < uRoomTop && vWorld.y > -0.5;
+  bool indoor = inRoom || (world ? vWorld.y < UNDER_Y : uViewUnder > 0.5);
   bool studio = dot(uStudio, uStudio) > 0.0;
   if (studio) indoor = false;
   vec3 L = studio ? normalize(uStudioKey) : indoor ? normalize(vec3(0.25, 1.0, 0.2)) : uSunDir;
@@ -661,6 +664,13 @@ void main() {
     skyCol = vec3(0.12, 0.13, 0.16);
     hemi = mix(vec3(0.035, 0.035, 0.045), vec3(0.13, 0.14, 0.17), n.y * 0.5 + 0.5);
     hemi += vec3(0.2, 0.17, 0.13) * (1.0 - abs(n.y)) * (0.22 + pool * 0.7);   // light washing down the walls
+    if (inRoom) {
+      // the armoury: bright, even shop lighting from the lamp strips, light on the walls so the racks read
+      pool = 0.8;
+      sunCol = vec3(1.0, 0.96, 0.9) * 1.7;
+      skyCol = vec3(0.32, 0.33, 0.36);
+      hemi = mix(vec3(0.16, 0.16, 0.17), vec3(0.5, 0.5, 0.53), n.y * 0.5 + 0.5) + vec3(0.32, 0.3, 0.27) * (1.0 - abs(n.y));
+    }
   }
 
   // glossier when dark (metal, rubber), rougher when light (paint, concrete) -- unless the part has a material
@@ -707,7 +717,7 @@ void main() {
   vec3 vd = -V;
   vec3 fogCol = uFogColor + vec3(0.06, 0.04, 0.0) * pow(max(dot(vd, L), 0.0), 8.0);
   if (studio) fogCol = studioBg(vd);
-  if (indoor) {
+  if (indoor && !inRoom) {
     fogCol = vec3(0.045, 0.05, 0.065);
     f = 1.0 - exp(-pow(uFogDensity * 1.7 * vViewZ, 2.0));
   }
@@ -893,7 +903,7 @@ export class Renderer {
     this.shadowProg = compile(gl, SHADOW_VERT, SHADOW_FRAG);
     this.u = {};
     for (const name of ['uProj', 'uView', 'uModel', 'uScale', 'uColor', 'uFogColor', 'uSunDir', 'uCamPos',
-      'uSkyTop', 'uGrid', 'uEdges', 'uEmissive', 'uAlpha', 'uFogDensity', 'uShadowOn', 'uSky', 'uLightVP', 'uShadowMap', 'uViewUnder', 'uAO', 'uRim', 'uMat', 'uStudio', 'uStudioFwd', 'uStudioKey', 'uTime', 'uInst']) {
+      'uSkyTop', 'uGrid', 'uEdges', 'uEmissive', 'uAlpha', 'uFogDensity', 'uShadowOn', 'uSky', 'uLightVP', 'uShadowMap', 'uViewUnder', 'uRoom', 'uRoomTop', 'uAO', 'uRim', 'uMat', 'uStudio', 'uStudioFwd', 'uStudioKey', 'uTime', 'uInst']) {
       this.u[name] = gl.getUniformLocation(this.prog, name);
     }
     this.su = {
@@ -1153,6 +1163,8 @@ export class Renderer {
 
   // the gun is lit by lamps instead of the sun when you're underground
   setUnder(on) { this.gl.uniform1f(this.u.uViewUnder, on ? 1 : 0); }
+  // a roofed room lit by lamps instead of the sun (pass null for none)
+  setRoom(r) { const g = this.gl; g.useProgram(this.prog); g.uniform4f(this.u.uRoom, ...(r ? [r[0], r[1], r[2], r[3]] : [1e9, 1e9, -1e9, -1e9])); g.uniform1f(this.u.uRoomTop, r ? r[4] : -1e9); }
 
   setCamera(proj, view, fogDensity, camPos = [0, 0, 0], shadows = true) {
     const gl = this.gl;

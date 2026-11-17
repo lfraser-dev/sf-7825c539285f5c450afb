@@ -738,6 +738,47 @@ let skinHeat = 0, skinStreak = 0;
 // credits for playing matches: 25 a kill, 50 a takedown, 300 for advancing (100 otherwise)
 let matchEarned = 0;
 function earn(n) { cosmetics.credits += n; matchEarned += n; saveCosmetics(cosmetics); }
+
+// ---- secret codes: click your credits on the menu to type one in. Only the hash is stored here, so reading the
+// code doesn't give the code away.
+const CODES = { '929bcfd2deb79232881529b4be2b35043a07556e285c3a0c2586a92caa4b3804': 100000 };
+async function redeemCode(txt) {
+  const code = String(txt || '').trim().toUpperCase().replace(/\s+/g, '');
+  if (!code || !crypto.subtle) return 0;
+  const h = [...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(code)))].map((b) => b.toString(16).padStart(2, '0')).join('');
+  const n = CODES[h] || 0;
+  if (n) { cosmetics.credits += n; saveCosmetics(cosmetics); renderMenu(); }
+  return n;
+}
+function openRedeem() {
+  if (document.getElementById('redeem')) return;
+  const box = document.createElement('div');
+  box.id = 'redeem';
+  box.style.cssText = 'position:fixed;inset:0;z-index:60;display:flex;align-items:center;justify-content:center;background:rgba(5,8,14,.72);font-family:var(--font)';
+  box.innerHTML = `<div style="background:#141a26;border:1px solid rgba(255,208,74,.4);padding:22px 24px;width:min(340px,90vw);color:#fff">
+    <div style="font-weight:800;letter-spacing:.1em;color:#ffd04a;margin-bottom:10px">REDEEM A CODE</div>
+    <input id="redeem-in" maxlength="40" autocomplete="off" spellcheck="false" placeholder="TYPE YOUR CODE" style="width:100%;box-sizing:border-box;padding:10px;font:700 16px var(--font);letter-spacing:.08em;text-transform:uppercase;background:#0b0f17;color:#fff;border:1px solid #39435a">
+    <div id="redeem-msg" style="min-height:20px;margin:8px 0;font-size:13px;color:#aab"></div>
+    <div style="display:flex;gap:8px"><button id="redeem-go" style="flex:1;padding:9px;font:800 14px var(--font);background:#ffd04a;color:#111;border:0;cursor:pointer">REDEEM</button>
+    <button id="redeem-x" style="padding:9px 14px;font:800 14px var(--font);background:#2a3244;color:#fff;border:0;cursor:pointer">CLOSE</button></div></div>`;
+  document.body.append(box);
+  const inp = box.querySelector('#redeem-in'), msg = box.querySelector('#redeem-msg');
+  const close = () => box.remove();
+  const go = async () => {
+    const n = await redeemCode(inp.value);
+    msg.style.color = n ? '#7dff9a' : '#ff7a7a';
+    msg.textContent = n ? `+${fmt(n)} ${CURRENCY} ADDED!` : 'That code doesn\'t work.';
+    if (n) inp.value = '';
+  };
+  box.querySelector('#redeem-go').onclick = go;
+  box.querySelector('#redeem-x').onclick = close;
+  box.onclick = (e) => { if (e.target === box) close(); };
+  inp.onkeydown = (e) => { e.stopPropagation(); if (e.key === 'Enter') go(); if (e.key === 'Escape') close(); };
+  inp.focus();
+}
+$('mm-credits').style.cursor = 'pointer';
+$('mm-credits').title = 'Redeem a code';
+$('mm-credits').addEventListener('click', openRedeem);
 function skinShot(d) { skinHeat = Math.min(1, skinHeat + Math.min(0.35, 0.025 + 8 / (d.rpm || 600))); }
 function updateSkinLive(dt) {
   skinHeat = Math.max(0, skinHeat - dt * (skinHeat > 0.6 ? 0.28 : 0.4));
@@ -3286,4 +3327,4 @@ function frameBody(now) {
 requestAnimationFrame(frame);
 
 // handy for debugging from the console / automated tests
- window.game = { kf: (...a) => killFeed(...a), daily, gainXp: (n, l) => gainXp(n, l), progress, skinLive: (h, s) => { skinHeat = h; skinStreak = s; }, startTakedown, updateTakedown, findDowned, takedownParts, get td() { return td; }, get deathT() { return deathT; }, nextInCase, skinKill, useBuff, get buff() { return { kind: buffKind, t: buffT }; }, setThrow: (k) => { equippedThrow = k; throwCharges = 2; }, useThrowable, get throwCharges() { return throwCharges; }, get flashT() { return flashT; }, heavy, useHeavy, applyClass, useGadget, useTether, useCloak, get cloakT() { return cloakT; }, get launcherW() { return launcherW; }, gadgets, get burning() { return burning; }, lobby, online, get tdm() { return tdm; }, batches, renderer, map, ARENAS, get stadium() { return stadium; }, setArena: (i) => { stadium = ARENAS[i]; }, lifts, hooks: botHooks, updateFall, hookTarget, fallTop: () => fallTop, breakGlass, updateCombat, startMatch: (m) => startMatch(m), enterStadium, where: () => where, sr: () => showroomChar, cosmetics, refreshGuns, classLo, renderMenu, showTab, enterRange, cs: () => cutscene, botMgr, elevator, damagePlayer, pressConsole, setTimeScale: (v) => { timeScale = v; }, bench, openBench, closeBench, loadouts, applyLoadout, course, player, slots, weapon, world, stats, effects, dummies, walls, cases, input, start, setPlaying, resetRange, switchTo, pickUp, WEAPONS };
+ window.game = { kf: (...a) => killFeed(...a), daily, gainXp: (n, l) => gainXp(n, l), progress, skinLive: (h, s) => { skinHeat = h; skinStreak = s; }, startTakedown, updateTakedown, findDowned, takedownParts, get td() { return td; }, get deathT() { return deathT; }, nextInCase, skinKill, redeemCode, useBuff, get buff() { return { kind: buffKind, t: buffT }; }, setThrow: (k) => { equippedThrow = k; throwCharges = 2; }, useThrowable, get throwCharges() { return throwCharges; }, get flashT() { return flashT; }, heavy, useHeavy, applyClass, useGadget, useTether, useCloak, get cloakT() { return cloakT; }, get launcherW() { return launcherW; }, gadgets, get burning() { return burning; }, lobby, online, get tdm() { return tdm; }, batches, renderer, map, ARENAS, get stadium() { return stadium; }, setArena: (i) => { stadium = ARENAS[i]; }, lifts, hooks: botHooks, updateFall, hookTarget, fallTop: () => fallTop, breakGlass, updateCombat, startMatch: (m) => startMatch(m), enterStadium, where: () => where, sr: () => showroomChar, cosmetics, refreshGuns, classLo, renderMenu, showTab, enterRange, cs: () => cutscene, botMgr, elevator, damagePlayer, pressConsole, setTimeScale: (v) => { timeScale = v; }, bench, openBench, closeBench, loadouts, applyLoadout, course, player, slots, weapon, world, stats, effects, dummies, walls, cases, input, start, setPlaying, resetRange, switchTo, pickUp, WEAPONS };

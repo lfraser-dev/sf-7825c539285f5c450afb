@@ -349,9 +349,11 @@ export function gunCrates(world, defs, benchPos) {
   const deco = (min, max, o) => add(min, max, { solid: false, noShadow: true, ...o });
   const [bx, by, bz] = benchPos;
   const D = 1.25, Hh = 0.62, t = 0.05;
-  // two big crates of primaries either side of the bench, and a small one of sidearms at the far right
+  // two big crates of primaries either side of the bench, a small one of sidearms at the far right; then the
+  // variants: two more big crates further left, and a small one of sidearm variants further right
   const groups = Array.isArray(defs[0]) ? defs : [defs.slice(0, Math.ceil(defs.length / 2)), defs.slice(Math.ceil(defs.length / 2))];
-  const crates = [[bx - 3.65, bz + 0.62, 3.1], [bx + 3.65, bz + 0.62, 3.1], [bx + 7.0, bz + 0.62, 1.9]].slice(0, groups.length);
+  const crates = [[bx - 3.65, bz + 0.62, 3.1], [bx + 3.65, bz + 0.62, 3.1], [bx + 7.0, bz + 0.62, 1.9],
+    [bx - 10.4, bz + 0.62, 3.1], [bx - 14.0, bz + 0.62, 3.1], [bx + 9.6, bz + 0.62, 1.9]].slice(0, groups.length);
   const items = [];
   // stencil "text": a row of short bars of varying width, like letters at a distance
   const stencil = (x0, y0, z, w, h, seed, col = STEN, face = -1) => {

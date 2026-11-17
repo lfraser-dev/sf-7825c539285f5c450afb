@@ -236,7 +236,11 @@ function myLook() {
   return { m: r(o.jacket || o.vest || o.top), h: r(o.head && o.head !== 'hair' ? o.headCol : o.hair), b: r(o.bottom), s: r(o.shoes), g: r(o.gloves), w, a: loadouts[w] || {}, sk: cosmetics.equip[classLo.cls].wskin || '', eq: { ...cosmetics.equip[classLo.cls] }, fx: o.fxJacket || (!o.jacket && !o.vest ? o.fxTop : 0) || 0 };
 }
 const casePrim = CASE_ORDER.filter((id) => !SIDEARMS.includes(id)), caseHalf = Math.ceil(casePrim.length / 2);
-const cases = gunCrates(world, [casePrim.slice(0, caseHalf), casePrim.slice(caseHalf), CASE_ORDER.filter((id) => SIDEARMS.includes(id))].map((g) => g.map((id) => defFor(id))), map.bench.pos);   // guns jammed in two crates by the workbench
+// the variants get crates of their own, in the same order as the guns they're built on
+const varOf = (ids) => ids.flatMap((id) => Object.keys(VARIANT_OF).filter((v) => VARIANT_OF[v] === id));
+const varPrim = varOf(casePrim), varHalf = Math.ceil(varPrim.length / 2);
+const cases = gunCrates(world, [casePrim.slice(0, caseHalf), casePrim.slice(caseHalf), CASE_ORDER.filter((id) => SIDEARMS.includes(id)),
+  varPrim.slice(0, varHalf), varPrim.slice(varHalf), varOf(CASE_ORDER.filter((id) => SIDEARMS.includes(id)))].map((g) => g.map((id) => defFor(id))), map.bench.pos);   // guns jammed in two crates by the workbench
 const workbench = new Workbench(world, map.bench.pos);
 player.spawn(map.spawn.pos, map.spawn.yaw);
 const course = new Course(map.course, sounds);

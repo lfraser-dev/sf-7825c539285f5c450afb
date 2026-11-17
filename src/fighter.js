@@ -3,6 +3,7 @@
 // a real gun from the shoulder, flinching, landing, takedown animations, and falling over when downed.
 import { Contestant } from './contestant.js';
 import { takedownPose } from './takedown.js';
+import { compose, mat4 } from './math.js';
 
 const ZERO = [0, 0, 0];
 const sm = (x) => (x <= 0 ? 0 : x >= 1 ? 1 : x * x * (3 - 2 * x));
@@ -101,6 +102,20 @@ export function humanParts(bot, dyingT) {
   bot.gunMatrix = fig.gunMatrix;
   // hit flash: everything whites out for a moment
   if (bot.flash > 0) out = out.map((p) => (p.tex >= 40 ? p : { ...p, color: p.color.map((v) => v + (1 - v) * 0.85), emissive: 0.9 }));
+  // a buff (online players): their whole body glows in its colour, pulsing
+  if (bot.glow && dyingT < 0) {
+    const [gc, k] = bot.glow;
+    out = out.map((p) => (p.tex >= 40 ? p : { ...p, color: p.color.map((v, i) => v + (gc[i] - v) * k * 0.3), emissive: Math.max(p.emissive || 0, k * 0.3) }));
+  }
+  // a railgun charging (online players): a ball of plasma building at their muzzle
+  if (bot.chargeK > 0.03 && bot.muzzlePt && dyingT < 0) {
+    const c = bot.chargeK, t = bot.breath || 0;
+    for (const [r, col, a] of [[0.02 + 0.07 * c * c, [0.85, 1, 1], 1], [0.05 + 0.18 * c * c, [0.2, 0.75, 1], 0.3 * c]]) {
+      const s = [r * (1 + 0.15 * Math.sin(t * 40)), r, r], m = mat4();
+      compose(m, bot.muzzlePt, [t * 5, t * 7, 0], s);
+      out.push({ model: m, scale: s, color: col, emissive: 1, shape: 'sphere', alpha: a < 1 ? a : undefined, edges: 0 });
+    }
+  }
   return out;
 }
 export { WHITE };

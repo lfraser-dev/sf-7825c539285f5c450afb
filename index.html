@@ -690,6 +690,48 @@ body:has(#matchend:not(.hidden)) .mm-page { visibility: hidden; }
   #gun-tip kbd { background: #fff; color: #111; font: 800 12px var(--font); padding: 1px 6px; margin-right: 4px; }
   @keyframes gtblink { 50% { opacity: .4; } }
   @media (max-width: 760px) { #gun-tip { left: auto; right: 12px; width: 240px; } }
+  #killskull { position: absolute; left: 50%; top: 50%; width: 34px; height: 34px; margin: -62px 0 0 -17px; color: #fff; opacity: 0; pointer-events: none; filter: drop-shadow(0 2px 4px rgba(0,0,0,.6)); }
+  #killskull svg { width: 100%; height: 100%; display: block; }
+  #killskull.head { color: var(--red); filter: drop-shadow(0 0 3px #ffd04a) drop-shadow(0 2px 4px rgba(0,0,0,.6)); }
+  #killskull.pop { animation: skullpop .75s ease-out; }
+  @keyframes skullpop { 0% { opacity: 0; transform: scale(2.2); } 15% { opacity: 1; transform: scale(.9); } 25% { transform: scale(1.05); } 70% { opacity: 1; transform: scale(1); } 100% { opacity: 0; transform: translateY(-10px) scale(.95); } }
+  body.kc #hud > *:not(#killcam):not(#killfeed), body.kc #death, body.kc #lowhp, body.kc #dmgdirs { visibility: hidden !important; }
+  #killcam { position: absolute; inset: 0; pointer-events: none; opacity: 0; transition: opacity .2s; }
+  #killcam.on { opacity: 1; }
+  #killcam .kc-bar { position: absolute; left: 0; right: 0; top: 0; height: 9vh; background: #000; }
+  #killcam .kc-bar.b { top: auto; bottom: 0; }
+  #killcam .kc-tag { position: absolute; left: 50%; top: calc(9vh + 14px); transform: translateX(-50%); font: 900 italic 30px var(--font); letter-spacing: .14em; color: #fff;
+    background: var(--red); padding: 2px 16px; animation: gtblink 1s steps(2) infinite; }
+  #killcam .kc-who { position: absolute; left: 50%; top: calc(9vh + 60px); transform: translateX(-50%); font: 800 16px var(--font); letter-spacing: .12em; color: #fff; text-shadow: 0 2px 6px #000; }
+  #killcam .kc-skip { position: absolute; right: 24px; bottom: calc(9vh + 16px); font: 700 13px var(--font); letter-spacing: .08em; color: #fff; opacity: .8; }
+  #killcam .kc-skip kbd { background: #fff; color: #111; font: 800 12px var(--font); padding: 1px 6px; margin-right: 4px; }
+  /* battle pass */
+  #menu[data-screen="pass"] { background: linear-gradient(90deg, rgba(8,8,10,.94), rgba(20,8,10,.9)); }
+  #menu[data-screen="pass"] .mm-name { display: none; }
+  .mm-pass { width: min(1180px, 100%); }
+  .bp-top { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 14px; }
+  #bp-head { flex: 1; min-width: 260px; }
+  .bp-season { font: 800 13px var(--font); letter-spacing: .16em; color: var(--red); }
+  .bp-tier { font: 900 italic 56px/1 var(--font); } .bp-tier span { font-size: 22px; opacity: .5; margin-left: 6px; }
+  .bp-bar { height: 8px; background: rgba(255,255,255,.12); margin: 8px 0 6px; max-width: 520px; } .bp-bar i { display: block; height: 100%; background: linear-gradient(90deg, var(--red), #ffd04a); }
+  .bp-sub { font: 700 12px var(--font); letter-spacing: .08em; opacity: .7; }
+  #bp-buy { font: 900 italic 18px var(--font); letter-spacing: .04em; padding: 14px 22px; border: 0; cursor: pointer; color: #111; background: linear-gradient(90deg, #ffd04a, #ff9a1a); }
+  #bp-buy.no { opacity: .45; cursor: not-allowed; } #bp-buy.own { background: rgba(255,208,74,.18); color: #ffd04a; cursor: default; }
+  .bp-legend { display: flex; gap: 14px; font: 800 11px var(--font); letter-spacing: .14em; opacity: .7; margin-bottom: 6px; } .bp-legend .p { color: #ffd04a; }
+  .bp-track { display: flex; gap: 6px; overflow-x: auto; padding: 4px 2px 12px; scroll-behavior: smooth; }
+  .bp-col { flex: 0 0 112px; display: flex; flex-direction: column; gap: 6px; }
+  .bp-n { font: 900 italic 18px var(--font); text-align: center; padding: 4px 0; background: rgba(255,255,255,.06); }
+  .bp-col.got .bp-n { background: var(--red); } .bp-col.next .bp-n { outline: 2px solid #ffd04a; outline-offset: -2px; }
+  .bp-r { height: 128px; background: rgba(255,255,255,.05); border-bottom: 3px solid var(--r, rgba(255,255,255,.15)); padding: 8px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; text-align: center; position: relative; cursor: default; }
+  .bp-r[style] { cursor: pointer; } .bp-r.none { opacity: .25; }
+  .bp-r.prem { background: rgba(255,208,74,.07); }
+  .bp-r b { font: 800 12px/1.15 var(--font); letter-spacing: .04em; } .bp-r small { font: 700 10px var(--font); letter-spacing: .12em; opacity: .6; }
+  .bp-cr { font-size: 26px; color: #ffd04a; }
+  .bp-sw { width: 54px; height: 54px; display: grid; place-items: center; font-size: 22px; background: radial-gradient(circle at 50% 40%, var(--sw), rgba(0,0,0,.4)); border-radius: 4px; }
+  .bp-col.got .bp-r::after { content: '✓'; position: absolute; top: 4px; right: 6px; font: 900 14px var(--font); color: #7dff9a; }
+  .bp-col.got .bp-r.locked::after { content: ''; }
+  .bp-r.locked { filter: grayscale(.7); opacity: .6; } .bp-r.locked::before { content: '🔒'; position: absolute; top: 4px; left: 6px; font-size: 12px; }
+  .price.pass { background: rgba(255,208,74,.18); color: #ffd04a; }
 </style>
 </head>
 <body>
@@ -794,6 +836,7 @@ body:has(#matchend:not(.hidden)) .mm-page { visibility: hidden; }
       <button data-tab="armoury" type="button">ARMOURY</button>
       <button data-tab="custom" type="button">CUSTOMIZATION</button>
       <button data-tab="shop" type="button">SHOP</button>
+      <button data-tab="pass" type="button">BATTLE PASS</button>
     </nav>
     <div class="mm-right">
       <div class="mm-chip" id="mm-chip"></div>
@@ -804,7 +847,7 @@ body:has(#matchend:not(.hidden)) .mm-page { visibility: hidden; }
 
   <section class="mm-page mm-home" data-page="home">
     <div class="mm-col mm-home-left">
-      <div class="mm-kicker">SEASON 1 · BUILD 0.65</div>
+      <div class="mm-kicker">SEASON 1 · BUILD 0.66</div>
       <button class="mm-big" id="mm-play" type="button">
         <span class="mm-big-t">PLAY</span>
         <span class="mm-big-s" id="mm-play-sub">SEMI-FINALS · FIND A MATCH</span>
@@ -856,13 +899,23 @@ body:has(#matchend:not(.hidden)) .mm-page { visibility: hidden; }
   <section class="mm-page hidden" data-page="shop">
     <div class="mm-col mm-shop">
       <div class="mm-head"><button class="mm-back" type="button">‹ BACK</button><h2>SHOP</h2></div>
-      <div class="sh-note">Try anything on by clicking it. Buy with credits. Earning credits arrives with the battle pass.</div>
+      <div class="sh-note">Try anything on by clicking it. Buy with credits: you earn them in matches, from levels, daily challenges and the battle pass.</div>
       <h4>FEATURED</h4>
       <div class="sh-featured" id="sh-featured"></div>
       <div class="sh-filter" id="sh-filter"></div>
       <div class="sh-grid" id="sh-grid"></div>
     </div>
     <div class="sh-buy" id="sh-buy"></div>
+  </section>
+
+  <section class="mm-page hidden" data-page="pass">
+    <div class="mm-col mm-pass">
+      <div class="mm-head"><button class="mm-back" type="button">‹ BACK</button><h2>BATTLE PASS</h2></div>
+      <div class="bp-top"><div id="bp-head"></div><button id="bp-buy" type="button"></button></div>
+      <div class="bp-legend"><span>FREE</span><span class="p">PREMIUM</span></div>
+      <div class="bp-track" id="bp-track"></div>
+      <div class="sh-note">Every bit of XP you earn in matches fills the pass. Rewards are given to you the moment you reach a tier. Click an item to try it on.</div>
+    </div>
   </section>
 
   <section class="mm-page hidden" data-page="settings">
@@ -918,43 +971,44 @@ body:has(#matchend:not(.hidden)) .mm-page { visibility: hidden; }
 <script type="importmap">
 {
  "imports": {
-  "./src/attachments.js": "./src/attachments.js?v=0.65-1794925169",
-  "./src/audio.js": "./src/audio.js?v=0.65-1794925169",
-  "./src/batch.js": "./src/batch.js?v=0.65-1794925169",
-  "./src/bench.js": "./src/bench.js?v=0.65-1794925169",
-  "./src/bots.js": "./src/bots.js?v=0.65-1794925169",
-  "./src/challenges.js": "./src/challenges.js?v=0.65-1794925169",
-  "./src/classes.js": "./src/classes.js?v=0.65-1794925169",
-  "./src/contestant.js": "./src/contestant.js?v=0.65-1794925169",
-  "./src/cosmetics.js": "./src/cosmetics.js?v=0.65-1794925169",
-  "./src/course.js": "./src/course.js?v=0.65-1794925169",
-  "./src/effects.js": "./src/effects.js?v=0.65-1794925169",
-  "./src/elevator.js": "./src/elevator.js?v=0.65-1794925169",
-  "./src/fighter.js": "./src/fighter.js?v=0.65-1794925169",
-  "./src/gadgets.js": "./src/gadgets.js?v=0.65-1794925169",
-  "./src/heavy.js": "./src/heavy.js?v=0.65-1794925169",
-  "./src/input.js": "./src/input.js?v=0.65-1794925169",
-  "./src/main.js": "./src/main.js?v=0.65-1794925169",
-  "./src/maps/arenas.js": "./src/maps/arenas.js?v=0.65-1794925169",
-  "./src/maps/testRange.js": "./src/maps/testRange.js?v=0.65-1794925169",
-  "./src/matchmaking.js": "./src/matchmaking.js?v=0.65-1794925169",
-  "./src/math.js": "./src/math.js?v=0.65-1794925169",
-  "./src/nav.js": "./src/nav.js?v=0.65-1794925169",
-  "./src/net.js": "./src/net.js?v=0.65-1794925169",
-  "./src/player.js": "./src/player.js?v=0.65-1794925169",
-  "./src/progress.js": "./src/progress.js?v=0.65-1794925169",
-  "./src/props.js": "./src/props.js?v=0.65-1794925169",
-  "./src/renderer.js": "./src/renderer.js?v=0.65-1794925169",
-  "./src/rig.js": "./src/rig.js?v=0.65-1794925169",
-  "./src/takedown.js": "./src/takedown.js?v=0.65-1794925169",
-  "./src/tdm.js": "./src/tdm.js?v=0.65-1794925169",
-  "./src/thumbs.js": "./src/thumbs.js?v=0.65-1794925169",
-  "./src/weapon.js": "./src/weapon.js?v=0.65-1794925169",
-  "./src/weapons.js": "./src/weapons.js?v=0.65-1794925169",
-  "./src/world.js": "./src/world.js?v=0.65-1794925169"
+  "./src/attachments.js": "./src/attachments.js?v=0.66-1794926989",
+  "./src/audio.js": "./src/audio.js?v=0.66-1794926989",
+  "./src/batch.js": "./src/batch.js?v=0.66-1794926989",
+  "./src/bench.js": "./src/bench.js?v=0.66-1794926989",
+  "./src/bots.js": "./src/bots.js?v=0.66-1794926989",
+  "./src/challenges.js": "./src/challenges.js?v=0.66-1794926989",
+  "./src/classes.js": "./src/classes.js?v=0.66-1794926989",
+  "./src/contestant.js": "./src/contestant.js?v=0.66-1794926989",
+  "./src/cosmetics.js": "./src/cosmetics.js?v=0.66-1794926989",
+  "./src/course.js": "./src/course.js?v=0.66-1794926989",
+  "./src/effects.js": "./src/effects.js?v=0.66-1794926989",
+  "./src/elevator.js": "./src/elevator.js?v=0.66-1794926989",
+  "./src/fighter.js": "./src/fighter.js?v=0.66-1794926989",
+  "./src/gadgets.js": "./src/gadgets.js?v=0.66-1794926989",
+  "./src/heavy.js": "./src/heavy.js?v=0.66-1794926989",
+  "./src/input.js": "./src/input.js?v=0.66-1794926989",
+  "./src/main.js": "./src/main.js?v=0.66-1794926989",
+  "./src/maps/arenas.js": "./src/maps/arenas.js?v=0.66-1794926989",
+  "./src/maps/testRange.js": "./src/maps/testRange.js?v=0.66-1794926989",
+  "./src/matchmaking.js": "./src/matchmaking.js?v=0.66-1794926989",
+  "./src/math.js": "./src/math.js?v=0.66-1794926989",
+  "./src/nav.js": "./src/nav.js?v=0.66-1794926989",
+  "./src/net.js": "./src/net.js?v=0.66-1794926989",
+  "./src/pass.js": "./src/pass.js?v=0.66-1794926989",
+  "./src/player.js": "./src/player.js?v=0.66-1794926989",
+  "./src/progress.js": "./src/progress.js?v=0.66-1794926989",
+  "./src/props.js": "./src/props.js?v=0.66-1794926989",
+  "./src/renderer.js": "./src/renderer.js?v=0.66-1794926989",
+  "./src/rig.js": "./src/rig.js?v=0.66-1794926989",
+  "./src/takedown.js": "./src/takedown.js?v=0.66-1794926989",
+  "./src/tdm.js": "./src/tdm.js?v=0.66-1794926989",
+  "./src/thumbs.js": "./src/thumbs.js?v=0.66-1794926989",
+  "./src/weapon.js": "./src/weapon.js?v=0.66-1794926989",
+  "./src/weapons.js": "./src/weapons.js?v=0.66-1794926989",
+  "./src/world.js": "./src/world.js?v=0.66-1794926989"
  }
 }
 </script>
-<script type="module" src="src/main.js?v=0.65-1794925169"></script>
+<script type="module" src="src/main.js?v=0.66-1794926989"></script>
 </body>
 </html>

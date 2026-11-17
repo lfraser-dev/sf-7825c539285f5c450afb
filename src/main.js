@@ -22,6 +22,7 @@ import { Course, fmtTime } from './course.js';
 import { Elevator } from './elevator.js';
 import { BotManager, Bot, teamPalette, lookPalette } from './bots.js';
 import { loadDaily, dailyList, dailyEvent, familyOf, msToReset } from './challenges.js';
+import { PASS, REWARDS, loadPass, savePass, tierOf, tierProgress, payOut } from './pass.js';
 import { loadProgress, levelInfo, rankOf, badgeHTML, addXp, XP, LEVEL_CREDITS, GUN_LV, TD_LV, SKIN_LV, gunLocked, tdLocked, skinLocked, unlocksAt, levelOf } from './progress.js';
 import { takedownPose, takedownProps, REACH } from './takedown.js';
 import { Matchmaking } from './matchmaking.js';
@@ -180,6 +181,7 @@ const classLo = loadLoadout();
 let loadouts = {};
 try { loadouts = JSON.parse(localStorage.getItem('semifinals.loadouts') || '{}') || {}; } catch { /* ignore */ }
 const cosmetics = loadCosmetics();
+const pass = loadPass();
 setHandLook(buildOutfit(cosmetics, classLo.cls));
 let skinClass = null;    // class whose weapon skin to show (defaults to the active class)
 const defFor = (id) => skinDef(buildDef(WEAPONS[id], loadouts[id] || {}), gunSkinFor(cosmetics, skinClass || classLo.cls));
@@ -189,6 +191,7 @@ let matchXp = 0, matchUnlocks = [];
 const unlockNames = { gun: (id) => WEAPONS[id]?.name || id, td: (id) => TAKEDOWNS[id]?.name || id, skin: (id) => ITEMS[id]?.name || id };
 function gainXp(n, label) {
   if (!n) return;
+  passXp(n);
   const ups = addXp(progress, n);
   matchXp += n;
   xpTick(`+${n} XP${label ? ' · ' + label : ''}`);
@@ -200,6 +203,60 @@ function gainXp(n, label) {
     setTimeout(() => banner(`LEVEL ${lv}`, `${r.name} · +${LEVEL_CREDITS} ${CURRENCY}${un.length ? ' · UNLOCKED ' + un.join(', ') : ''}`, 'good', 2.6), 400);
     sounds.checkpoint?.();
   }
+}
+// ---------- battle pass: the same XP fills it; each tier pays out as you reach it ----------
+function passXp(n) {
+  const before = tierOf(pass);
+  pass.xp += n;
+  if (tierOf(pass) === before) { savePass(pass); return; }
+  const paid = payOut(pass, cosmetics);
+  saveCosmetics(cosmetics);
+  paid.forEach((p, i) => setTimeout(() => { banner(`PASS TIER ${p.tier}`, p.labels.join(' · '), 'good', 2.2); sounds.coins?.(); }, 900 + i * 2400));
+}
+function buyPremium() {
+  if (pass.premium) return;
+  if (cosmetics.credits < PASS.premiumCost) { sounds.denied?.(); return; }
+  cosmetics.credits -= PASS.premiumCost;
+  pass.premium = true;
+  const paid = payOut(pass, cosmetics);
+  saveCosmetics(cosmetics);
+  sounds.finish?.();
+  banner('PREMIUM PASS', paid.length ? `${paid.length} REWARDS UNLOCKED` : 'UNLOCKED', 'good', 2.2);
+  renderMenu();
+}
+const PASS_TIER = {};    // item id -> [tier, 'free' | 'premium']
+for (const r of REWARDS) { if (r.free?.item) PASS_TIER[r.free.item] = [r.tier, 'FREE']; if (r.prem?.item) PASS_TIER[r.prem.item] = [r.tier, 'PREMIUM']; }
+function renderPass() {
+  const t = tierOf(pass), k = tierProgress(pass);
+  $('bp-head').innerHTML = `<div class="bp-season">${PASS.name}</div>
+    <div class="bp-tier"><b>${t}</b><span>/ ${PASS.tiers}</span></div>
+    <div class="bp-bar"><i style="width:${(k * 100).toFixed(1)}%"></i></div>
+    <div class="bp-sub">${t >= PASS.tiers ? 'SEASON COMPLETE' : `${fmt(pass.xp % PASS.perTier)} / ${fmt(PASS.perTier)} XP TO TIER ${t + 1} · EVERY MATCH COUNTS`}</div>`;
+  const buy = $('bp-buy');
+  buy.className = pass.premium ? 'own' : cosmetics.credits < PASS.premiumCost ? 'no' : '';
+  buy.textContent = pass.premium ? 'PREMIUM ✓' : `UNLOCK PREMIUM ◆ ${fmt(PASS.premiumCost)}`;
+  buy.onclick = buyPremium;
+  const reward = (r, prem) => {
+    const d = el('div', `bp-r${prem ? ' prem' : ''}${!r ? ' none' : ''}`);
+    if (!r) return d;
+    if (r.cr) d.append(el('div', 'bp-cr', '◆'), el('b', null, fmt(r.cr)), el('small', null, 'CREDITS'));
+    else {
+      const it = ITEMS[r.item], rr = RARITY[it.rarity];
+      d.style.setProperty('--r', rgb(rr.color));
+      const sw = el('div', 'bp-sw', iconFor(it.slot)); sw.style.setProperty('--sw', rgb(swatch(it) || [0.5, 0.5, 0.5]));
+      d.append(sw, el('b', null, it.name), el('small', null, rr.name));
+      d.onclick = () => { custSlot = it.slot; showTab('custom'); tryOn = r.item; renderMenu(); };
+    }
+    return d;
+  };
+  $('bp-track').replaceChildren(...REWARDS.map((r) => {
+    const col = el('div', `bp-col${r.tier <= t ? ' got' : ''}${r.tier === t + 1 ? ' next' : ''}`);
+    col.append(el('div', 'bp-n', String(r.tier)), reward(r.free, false), reward(r.prem, true));
+    if (!pass.premium) col.lastChild.classList.add('locked');
+    return col;
+  }));
+  const cur = $('bp-track').children[Math.max(0, t - 2)];
+  if (cur && !renderPass.scrolled) { renderPass.scrolled = true; requestAnimationFrame(() => { $('bp-track').scrollLeft = cur.offsetLeft - 20; }); }
 }
 // ---------- daily challenges ----------
 const daily = loadDaily();
@@ -362,10 +419,11 @@ function updateCamera() {
   }
   if (cutscene) { const c = cutsceneCam(); camEye = c.eye; camFwd = c.fwd; }
   else if ((td && !player.dead) || victimCam) { const c = takedownCam(); camEye = c.eye; camFwd = c.fwd; }
+  else if (killcam) { const c = killcamCam(); camEye = c.eye; camFwd = c.fwd; }
   camRight = norm(cross(camFwd, [0, 1, 0]));
   camUp = cross(camRight, camFwd);
   // apply roll to the basis so tracers/casings line up with what you see
-  const roll = cutscene ? 0 : td || victimCam ? cineRoll : player.dead ? player.roll + Math.min(1, (deathDur - deathT) / 0.6) * 0.9 : player.roll;
+  const roll = cutscene || killcam ? 0 : td || victimCam ? cineRoll : player.dead ? player.roll + Math.min(1, (deathDur - deathT) / 0.6) * 0.9 : player.roll;
   const c = Math.cos(roll), s = Math.sin(roll);
   const r2 = [0, 1, 2].map((k) => camRight[k] * c + camUp[k] * s);
   camUp = [0, 1, 2].map((k) => camUp[k] * c - camRight[k] * s);
@@ -430,7 +488,7 @@ function fire(w) {
       heavy.boom(end.map((c, k) => c - dir[k] * 0.15), d.blast.r, d.blast.dmg, d.name, true, 'mini');
       if (hit.box.tag !== 'bot' && hit.box.tag !== 'dummy') blastWalls(end, d.blast.r * 0.45, 120);
     }
-    if (i === 0 && online.active) online.myShot(muzzle, end);
+    if (i === 0 && online.active) online.myShot(muzzle, end, d.charge ? (d.blast ? 2 : 1) : 0);
     if (!hit) continue;
     const b = hit.box;
     if (b.tag === 'bot' && tdm.active && b.ref.team === tdm.myTeam.idx) continue;   // no friendly fire
@@ -553,6 +611,14 @@ function skinKill(at) {
   // off the gun itself: a burst of sparks from the muzzle
   if (!launcherW) effects.sparks(vmToWorld(weapon().gunPoint(weapon().def.muzzle)), 4 + tier * 3, col, 2.5, 0.35, 0.012, 0.5);
   if (!at) return;
+  if (online.active) online.send({ t: 'skk', id: online.myId, x: tex, n: tier, p: at.map((v) => +v.toFixed(2)) });
+  skinBurst(at, tex, tier, true);
+  if (skinStreak === 3 || skinStreak === 5 || (skinStreak > 5 && skinStreak % 5 === 0)) banner(skinStreak >= 5 ? 'UNSTOPPABLE' : 'ON FIRE', `${skinStreak} KILL STREAK`, 'good', 1.1);
+}
+// the burst where someone died to a live skin: yours, or another player's online (mine = shake your screen)
+function skinBurst(at, tex, tier, mine) {
+  if (!SKIN_KILL[tex]) return;
+  const [col, kind] = SKIN_KILL[tex], k = tier / 5;
   const p = [at[0], at[1], at[2]], n = 10 + tier * 9;
   const rainbow = () => { const h = Math.random() * 6.283; return [0.5 + 0.5 * Math.cos(h), 0.5 + 0.5 * Math.cos(h + 2.09), 0.5 + 0.5 * Math.cos(h + 4.19)]; };
   if (kind === 'fire') { for (let i = 0; i < n; i++) { const a = Math.random() * 6.283, sp = 2 + Math.random() * (3 + 4 * k); effects.flame(p, [Math.cos(a) * sp, 2 + Math.random() * 5, Math.sin(a) * sp], 1.4 + k * 1.6); } effects.sparks(p, n, [1, 0.8, 0.3], 6 + 4 * k, 0.8, 0.03, 3); }
@@ -564,8 +630,7 @@ function skinKill(at) {
   else for (let i = 0; i < n; i++) effects.sparks(p, 1, kind === 'rainbow' ? rainbow() : Math.random() < 0.25 ? [1, 1, 1] : col, 6 + 4 * k, 0.8, 0.04, 2.5);
   // a ring of light racing out along the ground: wider with every kill
   for (let i = 0; i < 16 + tier * 4; i++) { const a = i / (16 + tier * 4) * 6.283, sp = 5 + 5 * k; effects.spawnPiece([p[0], p[1] - 0.6, p[2]], [0.05, 0.05, 0.05], [Math.cos(a) * sp, 0.2, Math.sin(a) * sp], kind === 'rainbow' ? rainbow() : col, 0.45 + 0.25 * k, 1); effects.debris[effects.debris.length - 1].noGravity = true; }
-  if (tier >= 3) player.shake = Math.max(player.shake || 0, 0.1 * tier);
-  if (skinStreak === 3 || skinStreak === 5 || (skinStreak > 5 && skinStreak % 5 === 0)) banner(skinStreak >= 5 ? 'UNSTOPPABLE' : 'ON FIRE', `${skinStreak} KILL STREAK`, 'good', 1.1);
+  if (tier >= 3 && mine) player.shake = Math.max(player.shake || 0, 0.1 * tier);
 }
 
 // apply your damage to a target (a range dummy, a bot, or another player online)
@@ -576,18 +641,40 @@ function hitTarget(dummy, dmg, head, point, dir, wname, burn = false) {
   if (dummy.remote) {
     // another player online: tell them; they take the damage on their side
     online.myHit(dummy.remote, dmg, head, camEye);
-    if (!burn) showHitmarker(false, head);
+    if (!burn) { showHitmarker(false, head); sounds.hit(head); hitSparks(point, dir, head, false); }
     damageNumbers.push(num);
     return;
   }
   if (dummy.agent) dummy.agent.lastHitBy = tdm.you;      // deathmatch kill credit
   const dead = dummy.damage(dmg, dir);
   if (dead) { stats.kills++; burning.delete(dummy); }
-  if (dead && !dummy.name) skinKill(point);                 // range dummies count too, so you can see your skin go off
+  if (dead && !dummy.name) { skinKill(point); showSkull(head); }   // range dummies count too, so you can see your skin go off
   if (dead && dummy.name) killFeed('YOU', burn ? `${wname} 🔥` : wname, dummy.name, head);
   if (!burn || dead) showHitmarker(dead, head);
   damageNumbers.push(num);
-  if (dead) sounds.kill(); else if (!burn) sounds.hit();
+  if (dead) sounds.kill(head); else if (!burn) sounds.hit(head);
+  if (!burn) hitSparks(point, dir, head, dead);
+}
+// a hit on someone: a spray of sparks off them (gold on a headshot), and a puff that bursts bigger on a kill
+function hitSparks(p, dir, head, dead) {
+  const back = dir ? dir.map((v) => -v) : [0, 0, 0];
+  const at = p.map((c, i) => c + back[i] * 0.05);
+  for (let i = 0; i < (head ? 10 : 6); i++) {
+    const sp = 3 + Math.random() * 4, j = () => (Math.random() - 0.5) * 3;
+    effects.spawnPiece(at, [0.025, 0.025, 0.025], [back[0] * sp + j(), back[1] * sp + j() + 1.5, back[2] * sp + j()], head ? [1, 0.82, 0.25] : [1, 0.95, 0.8], 0.25 + Math.random() * 0.2, 1);
+  }
+  effects.dust(at, dead ? 8 : 3);
+}
+// the kill skull: pops up over the crosshair (red with a gold rim for a headshot)
+let skullEl = null;
+function showSkull(head) {
+  if (!skullEl) {
+    skullEl = document.createElement('div'); skullEl.id = 'killskull';
+    skullEl.innerHTML = '<svg viewBox="0 0 64 64"><path d="M32 4C17 4 8 14 8 27c0 8 4 13 8 16v9c0 3 2 5 5 5h3v-6h4v6h8v-6h4v6h3c3 0 5-2 5-5v-9c4-3 8-8 8-16C56 14 47 4 32 4z" fill="currentColor"/><circle cx="22" cy="28" r="7" fill="#000"/><circle cx="42" cy="28" r="7" fill="#000"/><path d="M32 36l-4 7h8z" fill="#000"/></svg>';
+    document.getElementById('hud').append(skullEl);
+  }
+  skullEl.classList.remove('pop', 'head'); void skullEl.offsetWidth;
+  skullEl.classList.add('pop'); if (head) skullEl.classList.add('head');
 }
 
 // ---------- fire: incendiary rounds and dragon's breath set what they hit alight ----------
@@ -793,7 +880,7 @@ function updateSkinLive(dt) {
   }
 }
 function killFeed(a, weaponName, b, head) {
-  if (a === 'YOU' && b !== 'YOU') { skinKill(lastHitPt); if (tdm.active) {
+  if (a === 'YOU' && b !== 'YOU') { skinKill(lastHitPt); showSkull(head); if (tdm.active) {
       const tdk = Object.values(TAKEDOWNS).some((t) => t.name === weaponName);
       earn(tdk ? 50 : 25); gainXp(tdk ? XP.takedown : XP.kill, tdk ? 'TAKEDOWN' : 'KILL');
       const gun = gunByName(String(weaponName).replace(' 🔥', ''));
@@ -833,6 +920,7 @@ function die(name) {
   killer = name;
   sounds.death();
   killFeed(name, 'RIFLE', 'YOU', false);
+  startKillcam(name);
   player.cancelAbilities();
   player.vel = [0, 0, 0];
 }
@@ -873,6 +961,91 @@ function makeMyBody(pos, yaw) {
   b.gunDef = slots[0]?.def || kitGun(classLo.cls);
   b.gunPartsOf = (def, m) => Weapon.worldParts(def, m);
   return b;
+}
+// ---------- killcam: when you're killed in a match, watch the last few seconds again over your killer's shoulder
+// Every combat tick (30 times a second) remembers where everyone was, where they aimed, and the shots fired.
+const KC_LEN = 3.2;
+let kcClock = 0, kcLast = -1, kcRec = [], kcShots = [], killcam = null, kcEl = null;
+function recordKillcam(dt) {
+  kcClock += dt;
+  if (kcClock - kcLast < 1 / 30) return;
+  kcLast = kcClock;
+  const a = [];
+  for (const e of tdm.agents || []) {
+    const b = e.bot;
+    if (b && !b.removed) a.push([e, [...b.pos], b.yaw, b.aimPitch || 0, b.alive, b.walk || 0, b.moving || 0, [...(b.localVel || [0, 0])], b.dying ?? -1]);
+  }
+  kcRec.push({ t: kcClock, me: [[...player.pos], player.yaw, player.pitch, !player.dead], a });
+  while (kcRec.length && kcRec[0].t < kcClock - KC_LEN - 0.6) kcRec.shift();
+  while (kcShots.length && kcShots[0].t < kcClock - KC_LEN - 0.6) kcShots.shift();
+}
+function kcShot(f, e, k) { if (tdm.active) kcShots.push({ t: kcClock, f: [...f], e: [...e], k }); }
+function startKillcam() {
+  if (!tdm.active || !inStadium() || victimCam || kcRec.length < 20) return;
+  const by = player.lastHitBy, agent = typeof by === 'string' ? online.byId?.(by) : by;
+  if (!agent?.bot || agent === tdm.you) return;
+  const me = makeMyBody(player.pos, player.yaw);
+  killcam = { agent, t: 0, t0: kcClock - KC_LEN, tEnd: kcClock, frames: kcRec.slice(), shots: kcShots.slice(), next: 0, body: me };
+  if (!kcEl) { kcEl = document.createElement('div'); kcEl.id = 'killcam'; document.getElementById('hud').append(kcEl); }
+  kcEl.innerHTML = `<div class="kc-bar"></div><div class="kc-tag">KILLCAM</div><div class="kc-who">${agent.name || 'ENEMY'}</div><div class="kc-skip"><kbd>SPACE</kbd> SKIP</div><div class="kc-bar b"></div>`;
+  kcEl.classList.add('on');
+  document.body.classList.add('kc');
+}
+function endKillcam() { if (!killcam) return; killcam = null; kcEl?.classList.remove('on'); document.body.classList.remove('kc'); }
+function updateKillcam(dt) {
+  const K = killcam;
+  K.t += dt;
+  if (input.hit('Space') || K.t > KC_LEN + 0.9) { endKillcam(); return; }
+  const pt = K.t0 + Math.min(K.t, KC_LEN + 0.9);
+  // the shots, as they happened
+  while (K.next < K.shots.length && K.shots[K.next].t <= pt) {
+    const s = K.shots[K.next++];
+    if (s.k) effects.beam(s.f, s.e, s.k === 2 ? [0.75, 0.4, 1] : RAIL_COL, 1.1, 0.1); else effects.tracer(s.f, s.e);
+  }
+  // my body: standing until the moment I died, then going down
+  const me = K.body, f = kcFrame(pt);
+  if (pt < K.tEnd) { me.alive = true; me.dying = -1; } else { if (me.alive) { me.alive = false; me.dying = 0; me.downed = true; me.flash = 0.12; me.fallSign = 1; } me.dying += dt; }
+  if (f) { me.pos = f.me[0].slice(); me.yaw = f.me[1]; me.aimPitch = f.me[2]; }
+  me.breath = (me.breath || 0) + dt;
+}
+// the recorded moment at time t, blended between the two snapshots either side
+function kcFrame(t) {
+  const F = killcam.frames;
+  if (!F.length) return null;
+  let i = 0;
+  while (i < F.length - 2 && F[i + 1].t < t) i++;
+  const a = F[i], b = F[i + 1] || a, k = b.t > a.t ? Math.max(0, Math.min(1, (t - a.t) / (b.t - a.t))) : 0;
+  const L = (x, y) => x + (y - x) * k, LA = (x, y) => { let d = y - x; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI; return x + d * k; };
+  const out = { me: [a.me[0].map((v, j) => L(v, b.me[0][j])), LA(a.me[1], b.me[1]), L(a.me[2], b.me[2])], a: [] };
+  for (const ra of a.a) {
+    const rb = b.a.find((x) => x[0] === ra[0]) || ra;
+    out.a.push([ra[0], ra[1].map((v, j) => L(v, rb[1][j])), LA(ra[2], rb[2]), L(ra[3], rb[3]), ra[4], L(ra[5], rb[5]), L(ra[6], rb[6]), ra[7], ra[8]]);
+  }
+  return out;
+}
+// everyone where they were (and puts them back afterwards)
+function killcamPose() {
+  const f = kcFrame(killcam.t0 + Math.min(killcam.t, KC_LEN + 0.9));
+  if (!f) return () => {};
+  const saved = [];
+  for (const [e, pos, yaw, pitch, alive, walk, moving, lv, dying] of f.a) {
+    const b = e.bot;
+    if (!b) continue;
+    saved.push([b, b.pos, b.yaw, b.aimPitch, b.alive, b.walk, b.moving, b.localVel, b.dying, b.flash]);
+    b.pos = pos; b.yaw = yaw; b.aimPitch = pitch; b.alive = alive; b.walk = walk; b.moving = moving; b.localVel = lv; b.dying = alive ? -1 : Math.max(0, dying); b.flash = 0;
+  }
+  return () => { for (const [b, ...v] of saved) [b.pos, b.yaw, b.aimPitch, b.alive, b.walk, b.moving, b.localVel, b.dying, b.flash] = v; };
+}
+// over the killer's right shoulder, looking where they aimed
+function killcamCam() {
+  const f = kcFrame(killcam.t0 + Math.min(killcam.t, KC_LEN + 0.9));
+  const r = f?.a.find((x) => x[0] === killcam.agent);
+  if (!r) return { eye: camEye, fwd: camFwd };
+  const [, pos, yaw, pitch] = r;
+  const fwd = [-Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), -Math.cos(yaw) * Math.cos(pitch)];
+  const right = [Math.cos(yaw), 0, -Math.sin(yaw)];
+  const head = [pos[0], pos[1] + 1.62, pos[2]];
+  return { eye: [0, 1, 2].map((k) => head[k] - fwd[k] * 1.2 + right[k] * 0.62 + (k === 1 ? 0.12 : 0)), fwd };
 }
 function findDowned() {
   if (!tdm.active || !inStadium() || player.dead || td) return null;
@@ -1144,6 +1317,7 @@ function watchMyTakedown(attackerBot, kind) {
   const def = TAKEDOWNS[kind];
   const me = makeMyBody(player.pos, player.yaw);
   me.alive = false; me.dying = 1; me.downed = true; me.fallSign = 1;
+  endKillcam();
   victimCam = { attacker: attackerBot, kind, def, t: 0, me, eye0: camEye.slice(), fwd0: camFwd.slice() };
   cine(true, def.name, 'YOU');
 }
@@ -1215,7 +1389,7 @@ const botHooks = {
   settleBody: (b, dt) => settleBody(world, b, dt),
   player,
   hitPlayer: (dmg, bot, from) => { player.lastHitBy = bot.agent || null; damagePlayer(dmg, from, bot.name); },
-  shot: (bot, from, end, dist) => { effects.tracer(from, end); sounds.botShot(dist); },
+  shot: (bot, from, end, dist) => { effects.tracer(from, end); sounds.botShot(dist, panOf(from)); kcShot(from, end, 0); },
   impact: (hit, u) => {
     if (hit.box.tag === 'glass') { breakGlass(hit.box, u || [0, 0, 0]); return; }
     if (hit.box.tag === 'barricade') { gadgets.damage(hit.box.ref, 16); effects.impact(hit.point, hit.normal, [1, 0.8, 0.45]); return; }
@@ -1429,6 +1603,7 @@ function updateCombat(dt) {
   if (tdm.active) {
     tdm.update(dt, tdm === online ? netHooks : botHooks);
     matchEvents();
+    if (inStadium()) recordKillcam(dt);
   }
   if (botMgr.state === 'countdown') {
     const n = Math.ceil(botMgr.timer);
@@ -1691,6 +1866,11 @@ const hud = {
   course: $('course'), courseTime: $('coursetime'), courseInfo: $('courseinfo'), flash: $('flash'), fade: $('fade'),
 };
 let hitTimer = 0;
+// how far left (-1) or right (+1) of where you're looking a sound is
+function panOf(p) {
+  const dx = p[0] - player.pos[0], dz = p[2] - player.pos[2], l = Math.hypot(dx, dz) || 1;
+  return (dx * Math.cos(player.yaw) - dz * Math.sin(player.yaw)) / l;
+}
 function showHitmarker(kill, head) {
   hud.hitmarker.className = kill ? 'kill' : head ? 'head' : '';
   hud.hitmarker.style.opacity = 1;
@@ -2055,6 +2235,7 @@ function enterRange() {
 }
 // PLAY: the semi-finals arena
 function enterStadium() {
+  kcRec = []; kcShots = []; endKillcam();          // a fresh match: forget the last one's killcam
   const arriving = where !== 'stadium';
   if (classDirty || !sessionStarted) { applyClass(); sessionStarted = true; }
   if (arriving) {
@@ -2128,6 +2309,7 @@ function itemCard(id, { onClick, on = false, priceTag = true }) {
   if (SKIN_LV[id] && !owns(cosmetics, id) && skinLocked(progress, id)) b.append(el('span', 'lvtag', `LV ${SKIN_LV[id]}`));
   if (priceTag) {
     if (owns(cosmetics, id)) b.append(el('span', 'price own', it.price ? 'OWNED' : 'FREE'));
+    else if (it.pass) b.append(el('span', 'price pass', `PASS ${PASS_TIER[id]?.[0] ?? ''}`));
     else b.append(el('span', 'price', `◆ ${fmt(it.price)}`));
   }
   b.onclick = onClick;
@@ -2165,10 +2347,11 @@ function renderCustom() {
   const foot = $('cu-foot');
   if (tryOn) {
     const it = ITEMS[tryOn];
-    const go = el('button', null, 'GET IT IN THE SHOP ›');
+    const pt = PASS_TIER[tryOn];
+    const go = el('button', null, it.pass ? 'SEE THE BATTLE PASS ›' : 'GET IT IN THE SHOP ›');
     go.type = 'button';
-    go.onclick = () => { const t = tryOn; showTab('shop'); tryOn = t; renderMenu(); };
-    foot.replaceChildren(`Previewing ${it.name} (not owned).`, go);
+    go.onclick = () => { const t = tryOn; showTab(it.pass ? 'pass' : 'shop'); tryOn = it.pass ? null : t; renderMenu(); };
+    foot.replaceChildren(it.pass ? `Previewing ${it.name}: battle pass tier ${pt?.[0]}${pt?.[1] === 'PREMIUM' ? ' (premium)' : ''}.` : `Previewing ${it.name} (not owned).`, go);
   } else foot.replaceChildren(`Equipped on ${CLASSES[cls].name}. Click an owned item to wear it, or a locked one to preview it.`);
 }
 function renderShop() {
@@ -2246,7 +2429,20 @@ setInterval(() => { try { online.refreshMe(); } catch { /* not in a room */ } },
 const netHooks = {
   player,
   onShatter: (b) => botHooks.onShatter(b),
-  remoteShot: (f, e, r) => { effects.tracer(f, e); sounds.botShot(Math.hypot(player.pos[0] - f[0], player.pos[2] - f[2])); if (r) botHooks.whiz(f, e); },
+  remoteSkin: (p, tex, tier) => skinBurst(p, tex, tier, false),
+  buff: () => (buffT > 0 ? buffKind : ''),
+  charge: () => { const w = weapon(); return w?.def.charge && !launcherW ? +(w.chargeT || 0).toFixed(2) : 0; },
+  remoteShot: (f, e, r, k) => {
+    if (k) {
+      // another player's railgun: the hanging beam, sparks where it landed, and the crack (quieter further off)
+      effects.beam(f, e, k === 2 ? [0.75, 0.4, 1] : RAIL_COL, 1.1, 0.1);
+      effects.sparks(e, 30, k === 2 ? [0.8, 0.5, 1] : [0.55, 0.95, 1], 9, 0.7, 0.04, 2);
+      sounds.railShot?.(); if (r) botHooks.whiz(f, e);
+      kcShot(f, e, k);
+      return;
+    }
+    kcShot(f, e, 0);
+    effects.tracer(f, e); sounds.botShot(Math.hypot(player.pos[0] - f[0], player.pos[2] - f[2]), panOf(f)); if (r) botHooks.whiz(f, e); },
   remoteHit: (dmg, from, name, byId) => { player.lastHitBy = byId; damagePlayer(dmg, from, name); },
   feed: (a, b, wid) => killFeed(a, WEAPONS[wid]?.name || 'GUN', b, false),
   banner: (...a) => banner(...a),
@@ -2573,6 +2769,7 @@ function renderMenu() {
   }
   if (menuTab === 'custom') renderCustom();
   if (menuTab === 'shop') renderShop();
+  if (menuTab === 'pass') renderPass();
   $('mm-name').replaceChildren(el('b', null, c.name), el('span', null, `${WEAPONS[sel.weapon].name} · ${ABILITIES[sel.ability].short} · ${HEAVIES[sel.heavy].short}`));
   $('mm-range-sub').textContent = sessionStarted && !classDirty && !inStadium() ? 'RESUME YOUR SESSION' : 'GUNS · MOVEMENT · PARKOUR · BOTS';
   $('mm-play-sub').textContent = match && inStadium() && !classDirty ? `RESUME · ${stadium.name}` : 'SEMI-FINALS · FIND A MATCH';
@@ -3114,7 +3311,8 @@ function frameBody(now) {
       deathT -= dt;
       settleBody(world, player, dt);      // killed in the air: fall to the floor (so your body and camera end up on it)
       if (victimCam) updateVictimCam(dt);
-      if (deathT <= 0) respawnPlayer();
+      else if (killcam) updateKillcam(dt);
+      if (deathT <= 0) { endKillcam(); respawnPlayer(); }
     }
     if (inStadium()) for (const c of stadium.cargo || []) c.update(dt, player);
     updateCombat(dt);
@@ -3240,7 +3438,9 @@ function frameBody(now) {
   lookDir(vmViewM, [0, 0, 0], [0, 0, -1], [0, 1, 0], player.roll * 0.5);
   worldVfov = vfov; worldAspect = aspect;
   const vmParts = bench.open || cutscene || player.dead || td ? [] : w.viewmodel(player, time);
+  const kcUndo = killcam ? killcamPose() : null;
   const botParts = tdm.active && inStadium() ? [...botMgr.drawParts(), ...tdm.drawParts()] : botMgr.drawParts();
+  if (kcUndo) { botParts.push(...killcam.body.parts()); kcUndo(); }
   if ((td && !player.dead) || victimCam) takedownParts(botParts);
   agentTakedownParts(botParts);
   const beams = worldBeams(w);
@@ -3317,12 +3517,13 @@ function frameBody(now) {
   for (const b of vis) if (b.alpha >= 1) renderer.drawBox(b);
   for (const p of caseVis) renderer.drawPart(p);
   effects.drawOpaque(renderer);
-  for (const p of botVis) renderer.drawPart(p);
+  for (const p of botVis) if ((p.alpha ?? 1) >= 1) renderer.drawPart(p);
   for (const b of beams) if ((b.alpha ?? 1) >= 1) renderer.drawPart(b, 0);
   renderer.setBlend(true);
   for (const b of vis) if (b.alpha < 1) renderer.drawBox(b);
   effects.drawTransparent(renderer);
   for (const b of beams) if ((b.alpha ?? 1) < 1) renderer.drawPart(b, 0);
+  for (const p of botVis) if ((p.alpha ?? 1) < 1) renderer.drawPart(p);     // see-through bits on people (a railgun charge's glow)
   for (const b of botMgr.beams()) renderer.draw(b.model, b.scale, b.color, 0, 0, b.emissive, b.alpha);
   renderer.setBlend(false);
 
@@ -3330,6 +3531,9 @@ function frameBody(now) {
   renderer.clearDepth();
   renderer.setCamera(vmProjM, vmViewM, 0, [0, 0, 0], false);
   renderer.setUnder(camEye[1] < -1.2);
+  // what the gunshots sound like: a room in the armoury, a hall underground, open air elsewhere
+  { const R = map.armoury.room, inRoom = !inStadium() && camEye[0] > R[0] && camEye[0] < R[2] && camEye[2] > R[1] && camEye[2] < R[3] && camEye[1] < R[4];
+    sounds.setEnv?.(inRoom ? 'in' : camEye[1] < -1.2 ? 'under' : 'out'); }
   if (bench.open) {
     // the gunsmith: the gun side-on in the middle of a dark studio, with its slot labels pinned to it
     renderer.clearTo([0.075, 0.08, 0.09]);
@@ -3365,4 +3569,4 @@ function frameBody(now) {
 requestAnimationFrame(frame);
 
 // handy for debugging from the console / automated tests
- window.game = { kf: (...a) => killFeed(...a), daily, gainXp: (n, l) => gainXp(n, l), progress, skinLive: (h, s) => { skinHeat = h; skinStreak = s; }, startTakedown, updateTakedown, findDowned, takedownParts, get td() { return td; }, get deathT() { return deathT; }, useRack, skinKill, redeemCode, useBuff, get buff() { return { kind: buffKind, t: buffT }; }, setThrow: (k) => { equippedThrow = k; throwCharges = 2; }, useThrowable, get throwCharges() { return throwCharges; }, get flashT() { return flashT; }, heavy, useHeavy, applyClass, useGadget, useTether, useCloak, get cloakT() { return cloakT; }, get launcherW() { return launcherW; }, gadgets, get burning() { return burning; }, lobby, online, get tdm() { return tdm; }, batches, renderer, map, ARENAS, get stadium() { return stadium; }, setArena: (i) => { stadium = ARENAS[i]; }, lifts, hooks: botHooks, updateFall, hookTarget, fallTop: () => fallTop, breakGlass, updateCombat, startMatch: (m) => startMatch(m), enterStadium, where: () => where, sr: () => showroomChar, cosmetics, refreshGuns, classLo, renderMenu, showTab, enterRange, cs: () => cutscene, botMgr, elevator, damagePlayer, pressConsole, setTimeScale: (v) => { timeScale = v; }, bench, openBench, closeBench, loadouts, applyLoadout, course, player, slots, weapon, world, stats, effects, dummies, walls, cases, input, start, setPlaying, resetRange, switchTo, pickUp, WEAPONS };
+ window.game = { kf: (...a) => killFeed(...a), daily, gainXp: (n, l) => gainXp(n, l), progress, skinLive: (h, s) => { skinHeat = h; skinStreak = s; }, startTakedown, updateTakedown, findDowned, takedownParts, get td() { return td; }, get deathT() { return deathT; }, useRack, skinKill, pass, passXp, buyPremium, redeemCode, useBuff, get buff() { return { kind: buffKind, t: buffT }; }, setThrow: (k) => { equippedThrow = k; throwCharges = 2; }, useThrowable, get throwCharges() { return throwCharges; }, get flashT() { return flashT; }, heavy, useHeavy, applyClass, useGadget, useTether, useCloak, get cloakT() { return cloakT; }, get launcherW() { return launcherW; }, gadgets, get burning() { return burning; }, lobby, online, get tdm() { return tdm; }, batches, renderer, map, ARENAS, get stadium() { return stadium; }, setArena: (i) => { stadium = ARENAS[i]; }, lifts, hooks: botHooks, updateFall, hookTarget, fallTop: () => fallTop, breakGlass, updateCombat, startMatch: (m) => startMatch(m), enterStadium, where: () => where, sr: () => showroomChar, cosmetics, refreshGuns, classLo, renderMenu, showTab, enterRange, cs: () => cutscene, botMgr, elevator, damagePlayer, pressConsole, setTimeScale: (v) => { timeScale = v; }, bench, openBench, closeBench, loadouts, applyLoadout, course, player, slots, weapon, world, stats, effects, dummies, walls, cases, input, start, setPlaying, resetRange, switchTo, pickUp, WEAPONS };

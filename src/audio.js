@@ -17,15 +17,56 @@ export class Sounds {
       this.noise = this.ctx.createBuffer(1, len, this.ctx.sampleRate);
       const d = this.noise.getChannelData(0);
       for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+      // the space you're in: gunshots send some of their sound into a reverb (a room or hall) and an echo (a
+      // slap off far walls outdoors). setEnv picks how much of each.
+      const c = this.ctx;
+      this.verb = c.createConvolver();
+      this.verbIn = c.createGain(); this.verbOut = c.createGain();
+      this.verbIn.connect(this.verb).connect(this.verbOut).connect(this.master);
+      this.echoIn = c.createGain();
+      const dl = c.createDelay(1.0), fb = c.createGain(), lp = c.createBiquadFilter();
+      lp.type = 'lowpass'; lp.frequency.value = 1800; fb.gain.value = 0.32; dl.delayTime.value = 0.22;
+      this.echoIn.connect(dl); dl.connect(lp).connect(fb).connect(dl);
+      this.echoOut = c.createGain(); lp.connect(this.echoOut).connect(this.master);
+      this.echoDelay = dl;
+      this.env = null; this.setEnv('out');
     }
     if (this.ctx.state === 'suspended') this.ctx.resume();
   }
 
   setVolume(v) { this.volume = v; if (this.master) this.master.gain.value = v; }
 
-  burst(dur, freq, gain, type = 'lowpass', q = 0.7) {
+  // 'out' (open air: a slap echo off the far walls, a long thin tail), 'in' (a room: a short dense reverb),
+  // 'under' (the underground deck: a big boomy hall)
+  setEnv(kind) {
+    const c = this.ctx; if (!c || kind === this.env) return;
+    this.env = kind;
+    const P = { out: [1.6, 3.2, 0.32, 0.22, 0.42], in: [0.7, 2.2, 0.75, 0.07, 0.05], under: [2.2, 1.6, 0.85, 0.13, 0.18] }[kind] || [1.6, 3.2, 0.32, 0.22, 0.42];
+    const [len, decay, wet, delay, echo] = P;
+    const n = Math.floor(c.sampleRate * len), ir = c.createBuffer(2, n, c.sampleRate);
+    for (let ch = 0; ch < 2; ch++) {
+      const d = ir.getChannelData(ch);
+      for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / n, decay) * (i < c.sampleRate * 0.004 ? i / (c.sampleRate * 0.004) : 1);
+    }
+    this.verb.buffer = ir;
+    this.verbOut.gain.setTargetAtTime(wet, c.currentTime, 0.05);
+    this.echoDelay.delayTime.setTargetAtTime(delay, c.currentTime, 0.05);
+    this.echoOut.gain.setTargetAtTime(echo, c.currentTime, 0.05);
+  }
+  // where a sound goes: optionally panned left/right, optionally sending some of itself into the room
+  _out(o) {
+    const c = this.ctx;
+    let node = this.master;
+    if (o.pan) { const p = c.createStereoPanner(); p.pan.value = Math.max(-1, Math.min(1, o.pan)); p.connect(this.master); node = p; }
+    if (!o.wet) return node;
+    const g = c.createGain(); g.connect(node);
+    const w = c.createGain(); w.gain.value = o.wet; g.connect(w); w.connect(this.verbIn); w.connect(this.echoIn);
+    return g;
+  }
+
+  burst(dur, freq, gain, type = 'lowpass', q = 0.7, o = null) {
     const c = this.ctx; if (!c) return;
-    const t = c.currentTime;
+    const t = c.currentTime + (o?.at || 0);
     const src = c.createBufferSource();
     src.buffer = this.noise;
     src.playbackRate.value = 0.9 + Math.random() * 0.2;
@@ -34,13 +75,13 @@ export class Sounds {
     const g = c.createGain();
     g.gain.setValueAtTime(gain, t);
     g.gain.exponentialRampToValueAtTime(0.001, t + dur);
-    src.connect(f).connect(g).connect(this.master);
+    src.connect(f).connect(g).connect(o ? this._out(o) : this.master);
     src.start(t, Math.random() * 0.3, dur + 0.05);
   }
 
-  tone(f0, f1, dur, gain, type = 'sine') {
+  tone(f0, f1, dur, gain, type = 'sine', opt = null) {
     const c = this.ctx; if (!c) return;
-    const t = c.currentTime;
+    const t = c.currentTime + (opt?.at || 0);
     const o = c.createOscillator();
     o.type = type;
     o.frequency.setValueAtTime(f0, t);
@@ -48,16 +89,19 @@ export class Sounds {
     const g = c.createGain();
     g.gain.setValueAtTime(gain, t);
     g.gain.exponentialRampToValueAtTime(0.001, t + dur);
-    o.connect(g).connect(this.master);
+    o.connect(g).connect(opt ? this._out(opt) : this.master);
     o.start(t);
     o.stop(t + dur + 0.02);
   }
 
   shot(s = { freq: 2600, thump: 150, gain: 0.55 }) {
-    const dur = s.dur || 0.13;
-    this.burst(dur, s.freq, s.gain);
-    this.burst(0.05, 6000, s.gain * 0.45, 'highpass');
-    this.tone(s.thump, 40, dur * 0.85, s.gain * 0.9);
+    const dur = s.dur || 0.13, quiet = s.gain < 0.3, W = { wet: quiet ? 0.12 : 0.55 };
+    this.burst(dur, s.freq, s.gain, 'lowpass', 0.7, W);                         // the body of the bang
+    this.burst(0.05, 6000, s.gain * 0.45, 'highpass');                           // the supersonic crack
+    this.tone(s.thump, 40, dur * 0.85, s.gain * 0.9, 'sine', W);                 // the punch in your chest
+    this.tone(s.thump * 0.5, 28, dur * 1.6, s.gain * 0.35);                      // sub rumble
+    this.burst(0.018, 3800 + Math.random() * 800, s.gain * 0.3, 'bandpass', 3);  // the action cycling
+    if (!quiet) this.burst(0.5 + dur, s.freq * 0.45, s.gain * 0.16, 'lowpass', 0.6, { wet: 1 });   // the tail, mostly room
   }
   click(freq = 2800, gain = 0.25, q = 4) { this.burst(0.045, freq, gain, 'bandpass', q); }
   magOut() { this.click(2200, 0.28); setTimeout(() => this.burst(0.08, 900, 0.12), 60); }
@@ -101,9 +145,15 @@ export class Sounds {
     this.tone(90, 32, 0.6, 0.6 * Math.min(power, 1.2));
     setTimeout(() => this.burst(0.5, 700, 0.25), 60);
   }
-  botShot(dist = 10) {
-    const g = Math.max(0.06, 0.4 / (1 + dist * 0.08));
-    this.burst(0.09, 2200, g); this.tone(220, 60, 0.08, g * 0.7);
+  // someone else's gun: further away it gets quieter, duller (the highs die first), more echo than bang, and it
+  // arrives late (sound is slow); it comes from their side of you
+  botShot(dist = 10, pan = 0) {
+    const g = Math.max(0.035, 0.42 / (1 + dist * 0.07)), cut = Math.max(700, 5200 / (1 + dist * 0.06));
+    const o = { at: Math.min(0.35, dist / 343), pan: pan * Math.min(1, 0.3 + dist * 0.03), wet: Math.min(1, 0.35 + dist * 0.02) };
+    this.burst(0.1 + Math.min(0.15, dist * 0.004), cut, g, 'lowpass', 0.7, o);
+    this.tone(200, 50, 0.1, g * 0.75, 'sine', o);
+    if (dist < 14) this.burst(0.03, 5000, g * 0.4, 'highpass', 0.7, o);           // close enough to hear the crack
+    else this.burst(0.6, cut * 0.5, g * 0.35, 'lowpass', 0.6, { ...o, wet: 1 });   // far: mostly a rolling echo
   }
   whiz() { this.burst(0.12, 4200, 0.12, 'bandpass', 6); this.tone(2400, 900, 0.1, 0.03, 'sine'); }
   hurt() { this.burst(0.18, 260, 0.45); this.tone(180, 90, 0.15, 0.18, 'sine'); }
@@ -147,8 +197,16 @@ export class Sounds {
   whoosh() { this.burst(0.9, 900, 0.12, 'bandpass', 0.6); }
   elevatorStart() { this.click(900, 0.3, 2); this.burst(0.4, 400, 0.12); }      // gate latch + motor clunk
   elevatorDing() { this.burst(0.25, 300, 0.25); this.click(1400, 0.25, 3); }   // car settles
-  hit() { this.tone(1400, 1100, 0.05, 0.18, 'square'); }
-  kill() { this.tone(900, 1800, 0.12, 0.2, 'triangle'); this.burst(0.35, 1800, 0.35, 'bandpass', 1.2); }
+  // hit marker: a crisp tick (a bright ding for a headshot); kill: a punchy thunk and a rising chime
+  hit(head = false) {
+    this.burst(0.025, 4200, 0.3, 'bandpass', 4); this.tone(1700, 1400, 0.04, 0.12, 'square');
+    if (head) { this.tone(2900, 2850, 0.22, 0.12, 'sine'); this.tone(4350, 4300, 0.16, 0.05, 'sine'); }
+  }
+  kill(head = false) {
+    this.burst(0.08, 900, 0.4, 'lowpass', 1); this.tone(160, 70, 0.14, 0.35);
+    this.tone(900, 1800, 0.12, 0.16, 'triangle'); this.burst(0.3, 1800, 0.22, 'bandpass', 1.2);
+    if (head) setTimeout(() => this.tone(2400, 2400, 0.25, 0.12, 'sine'), 60);
+  }
   barricade() { this.burst(0.3, 260, 0.45); this.click(900, 0.4, 2); setTimeout(() => { this.click(1800, 0.35, 4); this.burst(0.12, 1400, 0.12); }, 180); }
   barricadeHit() { this.click(1100 + Math.random() * 400, 0.16, 3); }
   barricadeBreak() { this.burst(0.5, 500, 0.5); this.burst(0.3, 2600, 0.15, 'bandpass', 1.5); this.tone(160, 50, 0.4, 0.2); }

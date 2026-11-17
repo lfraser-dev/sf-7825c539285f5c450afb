@@ -398,6 +398,7 @@ class Remote {
   // a state packet: { p, y, pi, hp, mh, d, c, w }
   state(s) {
     this.hp = s.hp; this.maxHp = s.mh; this.wep = s.w; this.gr = s.gr || null; this.cl = !!s.cl;
+    this.bf = typeof s.bf === 'string' ? s.bf : ''; this.ch = Number.isFinite(s.ch) ? Math.max(0, Math.min(1, s.ch)) : 0;
     if (s.d) return;
     if (!this.bot || this.dead || this.bot.removed) { this.spawn(s.p, s.y); }
     this.target = s;
@@ -455,6 +456,10 @@ class Remote {
       b.yaw = t.y;
       b.aimPitch = t.pi;
     }
+    // what they've got going: a buff glows round them, a railgun charge builds at their muzzle
+    const GLOW = { stim: [0.3, 1, 0.45], overdrive: [1, 0.25, 0.12], fortify: [0.3, 0.6, 1], charge: [1, 0.6, 0.15], scan: [0.4, 0.9, 1] };
+    b.glow = GLOW[this.bf] ? [GLOW[this.bf], 0.55 + 0.45 * Math.sin(b.breath * 7)] : null;
+    b.chargeK = (b.chargeK || 0) + ((this.ch || 0) - (b.chargeK || 0)) * Math.min(1, dt * 12);
     // animation bookkeeping (as the AI agents do)
     b.flash -= dt; b.muzzleT -= dt;
     b.recoil *= Math.exp(-16 * dt); b.flinch *= Math.exp(-7 * dt); b.landK *= Math.exp(-3.5 * dt);
@@ -634,7 +639,8 @@ export class Online {
       case 'closed': this.ui.status?.('THE HOST CLOSED THE ROOM'); if (this.active) this.ui.onHostLeft?.(); this.leave(); this.ui.lobby?.(null, false); break;
       case 'start': this.begin(m); break;
       case 'st': { const r = this.byId(m.id); if (r) r.state(m); break; }
-      case 'shot': { if (m.id === this.myId || this.byId(m.id)?.isAI) break; const r = this.byId(m.id); if (r?.bot?.alive) { r.bot.muzzleT = 0.05; r.bot.recoil = 1; } this.g?.remoteShot(m.f, m.e, r); break; }
+      case 'shot': { if (m.id === this.myId || this.byId(m.id)?.isAI) break; const r = this.byId(m.id); if (r?.bot?.alive) { r.bot.muzzleT = 0.05; r.bot.recoil = 1; } this.g?.remoteShot(m.f, m.e, r, m.k || 0); break; }
+      case 'skk': if (m.id !== this.myId && this.active && Array.isArray(m.p) && m.p.length === 3 && m.p.every(Number.isFinite)) this.g?.remoteSkin?.(m.p, m.x | 0, Math.max(1, Math.min(5, m.n | 0))); break;
       case 'gad': if (m.id !== this.myId && this.active) this.g?.remoteGadget?.(m.g); break;
       case 'gl': case 'boom': case 'drn': case 'tsh': case 'trap': case 'trapgone': case 'teth': case 'gdel': if (m.id !== this.myId && this.active) this.g?.remoteHeavy?.(m); break;
       case 'gdm': if (this.active) this.g?.remoteGadgetHit?.(m.gid, m.dmg); break;
@@ -723,7 +729,7 @@ export class Online {
   entities() { return [this.you, ...this.agents]; }
 
   // ---- my own events, reported by the game
-  myShot(from, end) { this.send({ t: 'shot', id: this.myId, f: from.map((v) => +v.toFixed(2)), e: end.map((v) => +v.toFixed(2)) }); }
+  myShot(from, end, k = 0) { this.send({ t: 'shot', id: this.myId, f: from.map((v) => +v.toFixed(2)), e: end.map((v) => +v.toFixed(2)), k: k || undefined }); }
   myHit(remote, dmg, head, from) { this.send({ t: 'hit', to: remote.id, by: this.myId, dmg, head, f: from.map((v) => +v.toFixed(2)) }); }
   // takedowns: { t: 'td', id: who did it, v: who was downed, k: which takedown }
   myTakedown(victimId, kind, byId = this.myId) { const m = { t: 'td', id: byId, v: victimId, k: kind }; this.send(m); this.onTakedown(m); }
@@ -789,7 +795,7 @@ export class Online {
         this.send({ t: 'st', ts: Math.round(nowMs()), id: a.id, p: b.pos.map((v) => +v.toFixed(3)), y: +b.yaw.toFixed(3), pi: +(b.aimPitch || 0).toFixed(3), hp: Math.max(0, Math.round(b.hp)), mh: b.maxHp, d: b.alive ? 0 : 1, w: ({ light: 'smg', medium: 'ar', heavy: 'lmg' })[a.cls] });
       }
       const p = g.player;
-      this.send({ t: 'st', ts: Math.round(nowMs()), id: this.myId, p: p.pos.map((v) => +v.toFixed(3)), y: +p.yaw.toFixed(3), pi: +(p.pitch || 0).toFixed(3), hp: Math.max(0, Math.round(p.hp)), mh: p.maxHp, d: p.dead ? 1 : 0, w: g.weaponId?.(), gr: g.grapplePoint?.() || undefined, cl: g.cloaked?.() ? 1 : undefined });
+      this.send({ t: 'st', ts: Math.round(nowMs()), id: this.myId, p: p.pos.map((v) => +v.toFixed(3)), y: +p.yaw.toFixed(3), pi: +(p.pitch || 0).toFixed(3), hp: Math.max(0, Math.round(p.hp)), mh: p.maxHp, d: p.dead ? 1 : 0, w: g.weaponId?.(), gr: g.grapplePoint?.() || undefined, cl: g.cloaked?.() ? 1 : undefined, bf: g.buff?.() || undefined, ch: g.charge?.() || undefined });
     }
   }
 

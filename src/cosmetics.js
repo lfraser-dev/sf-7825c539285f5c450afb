@@ -257,6 +257,20 @@ export function gunSkinFor(st, cls, tryOn = null) {
 export function skinDef(def, skin) {
   if (!skin) return def;
   const lum = (c) => c[0] * 0.3 + c[1] * 0.59 + c[2] * 0.11;
+  if (def.melee) {
+    // melee: the skin goes on the blade (or hammer head) and the fittings; the grip keeps its wrap, and the edge stays
+    // bright, glowing in the skin's colour for a live skin. The swing's streak takes the skin's colour too.
+    const sw = skin.sw || skin.main || [0.8, 0.9, 1], bright = sw.map((v) => Math.min(1, v * 0.6 + 0.45));
+    const parts = def.parts.map((p) => {
+      if (/^(grip|gripRing|lanyard|tape)$/.test(p.name)) return p;
+      if (p.name === 'edge' || p.name === 'hamon') return { ...p, col: skin.tex ? bright : p.col.map((v, i) => v * 0.7 + bright[i] * 0.3), em: skin.tex ? (p.name === 'edge' ? 0.6 : 0.3) : p.em };
+      if (p.name === 'wrap') return { ...p, col: skin.tex ? sw.map((v) => v * 0.7) : skin.main };
+      if (skin.tex) return { ...p, tex: skin.tex, col: [0, lum(p.col), 0] };
+      const l = lum(p.col);
+      return { ...p, col: l < 0.14 ? skin.dark : skin.main.map((v) => v * (0.55 + l * 1.1)), em: skin.glow && l >= 0.14 ? 0.12 : p.em };
+    });
+    return { ...def, parts, trail: bright, liveSkin: skin.tex || undefined };
+  }
   if (skin.tex) {
     // a live skin: the shader paints the pattern; each part's colour carries [energy, its brightness, streak]
     const parts = def.parts.map((p) => (p.em || p.m === 'glass' ? p : { ...p, tex: skin.tex, col: [0, lum(p.col), 0] }));

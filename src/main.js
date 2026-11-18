@@ -592,7 +592,7 @@ function updateMelee(dt) {
     const head = camFwd[1] > -0.05 && h.point[1] > camEye[1] - 0.25;            // a high swing at someone standing: a head hit
     hitTarget(h.ref, Math.round(M.dmg * (head ? w.def.headMult : 1)), head, h.point, dir, w.def.name);
   }
-  if (hits.length) { sounds.meleeHit?.(M.style); player.shake = Math.max(player.shake || 0, M.style === 'smash' ? 0.5 : 0.2); stats.hits++; }
+  if (hits.length) { sounds.meleeHit?.(M.style); player.shake = Math.max(player.shake || 0, M.style === 'smash' ? 0.5 : 0.2); stats.hits++; slowmo = Math.max(slowmo, M.style === 'smash' ? 0.1 : 0.06); player.camPitchV -= M.style === 'smash' ? 0.9 : 0.35; }
   else {
     // nothing living in reach: hit whatever's in front (walls crumble under the hammer, glass breaks)
     const hit = world.raycast(camEye, camFwd, M.range);
@@ -676,20 +676,21 @@ function skinKill(at) {
   skinStreak++; skinHeat = Math.min(1, skinHeat + 0.45);
   const tex = weapon()?.def.liveSkin;
   if (!tex) return;
-  const [col, kind] = SKIN_KILL[tex] || [[1, 1, 1], 'bits'];
+  const [col] = SKIN_KILL[tex] || [[1, 1, 1], 'bits'];
   const tier = Math.min(5, skinStreak), k = tier / 5;           // 1..5 kills: each one bigger
   skinKillT = 1; skinKillAmp = 0.45 + 0.55 * k;
   // off the gun itself: a burst of sparks from the muzzle
   if (!launcherW) effects.sparks(vmToWorld(weapon().gunPoint(weapon().def.muzzle)), 4 + tier * 3, col, 2.5, 0.35, 0.012, 0.5);
   if (!at) return;
   if (online.active) online.send({ t: 'skk', id: online.myId, x: tex, n: tier, p: at.map((v) => +v.toFixed(2)) });
-  skinBurst(at, tex, tier, true);
+  skinBurst(at, tex, tier, true, !!weapon().def.melee);
   if (skinStreak === 3 || skinStreak === 5 || (skinStreak > 5 && skinStreak % 5 === 0)) banner(skinStreak >= 5 ? 'UNSTOPPABLE' : 'ON FIRE', `${skinStreak} KILL STREAK`, 'good', 1.1);
 }
 // the burst where someone died to a live skin: yours, or another player's online (mine = shake your screen)
-function skinBurst(at, tex, tier, mine) {
+function skinBurst(at, tex, tier, mine, melee = false) {
   if (!SKIN_KILL[tex]) return;
-  const [col, kind] = SKIN_KILL[tex], k = tier / 5;
+  let [col, kind] = SKIN_KILL[tex]; const k = tier / 5;
+  if (melee && kind === 'coins') kind = 'slash';     // a blade doesn't throw brass
   const p = [at[0], at[1], at[2]], n = 10 + tier * 9;
   const rainbow = () => { const h = Math.random() * 6.283; return [0.5 + 0.5 * Math.cos(h), 0.5 + 0.5 * Math.cos(h + 2.09), 0.5 + 0.5 * Math.cos(h + 4.19)]; };
   if (kind === 'fire') { for (let i = 0; i < n; i++) { const a = Math.random() * 6.283, sp = 2 + Math.random() * (3 + 4 * k); effects.flame(p, [Math.cos(a) * sp, 2 + Math.random() * 5, Math.sin(a) * sp], 1.4 + k * 1.6); } effects.sparks(p, n, [1, 0.8, 0.3], 6 + 4 * k, 0.8, 0.03, 3); }
@@ -708,7 +709,8 @@ function skinBurst(at, tex, tier, mine) {
 function hitTarget(dummy, dmg, head, point, dir, wname, burn = false) {
   lastHitPt = point;
   dummy.lastHead = head;
-  if (tdm.active && dummy.zombie) { dummy.lastByMelee = !!weapon().def.melee; dmg = tdm.onHit?.(dummy, head, dmg) ?? dmg; }
+  dummy.lastByMelee = !!weapon()?.def.melee;
+  if (tdm.active && dummy.zombie) { dmg = tdm.onHit?.(dummy, head, dmg) ?? dmg; }
   if (buffOn('overdrive') && wname !== 'BULL CHARGE') dmg *= 1.25;
   const num = { pos: [...point], amount: dmg, head, burn, t: 0, el: null, drift: Math.random() - 0.5 };
   if (dummy.remote) {
@@ -1576,6 +1578,15 @@ const botHooks = {
   },
   // after the death fall: the body breaks apart
   onShatter: (bot) => {
+    if (bot.lastByMelee && !bot.zombie) {
+      // cut down: no brass, just a slash of light through the body, sparks and a puff of dust
+      const c = bodyPt(bot), col = weapon()?.def.trail || [0.85, 0.92, 1], tc = bot.pal ? [...bot.pal.values()][0] : [0.9, 0.3, 0.2];
+      for (let j = 0; j < 2; j++) { const a = Math.random() * 6.283, u = [Math.cos(a), 0.4 + Math.random() * 0.6, Math.sin(a)]; effects.beam(c.map((v, i) => v - u[i] * 0.8), c.map((v, i) => v + u[i] * 0.8), col, 0.3, 0.03); }
+      effects.sparks(c, 18, col, 6, 0.5, 0.03, 2);
+      for (let i = 0; i < 14; i++) effects.spawnPiece(c, [0.04, 0.04, 0.04], [(Math.random() - 0.5) * 5, 1 + Math.random() * 4, (Math.random() - 0.5) * 5], tc, 0.5 + Math.random() * 0.4, 1);
+      effects.dust(bot.pos, 6);
+      return;
+    }
     if (bot.zombie) {
       // the dead go back to dust: a puff of ash and rot, no coins
       const c = bodyPt(bot);

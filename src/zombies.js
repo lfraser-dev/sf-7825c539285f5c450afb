@@ -242,7 +242,7 @@ class Zombie {
     let moved = 0;
     if (this.state === 'approach') {
       moved = this.step(w.outside[0], w.outside[2], sp, dt);
-      this.face(w.outside[0] - w.n[0], w.outside[2] - w.n[2], dt);
+      this.face(w.outside[0] - w.n[0], w.outside[2] - w.n[1], dt);
       if (dist2(b.pos, w.outside) < 0.15) this.state = 'tear';
     } else if (this.state === 'tear') {
       this.face(w.inside[0], w.inside[2], dt);

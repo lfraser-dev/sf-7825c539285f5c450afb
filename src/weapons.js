@@ -1396,28 +1396,42 @@ const melee = (id, name, parts, M, extra = {}) => {
     sightY: 0.05, adsZ: -0.4, hip: [0.2, -0.2, -0.38], muzzle: [0, 0, -0.3], grip: [0, 0, 0.05], foreGrip: [0, 0, 0.05], eject: [0, 0, 0], magPos: [0, 0, 0], bolt: [0, 0, 0],
     sound: { freq: 900, thump: 90, gain: 0.25 }, melee: M, parts, flashScale: 0, ...extra };
 };
+const ser = (n, z0, dz, y, sz) => Array.from({ length: n }, (_, i) => ({ name: 'serr', c: [0, y, z0 - i * dz], s: [0.0055, sz, sz], rx: 0.785, col: [0.7, 0.72, 0.76], m: 'steel' }));
 melee('knife', 'COMBAT KNIFE', [
+  // a black rubber grip with finger grooves, a steel guard and pommel, a clip-point blade with a serrated spine
   { name: 'grip', c: [0, 0, 0.05], s: [0.026, 0.032, 0.11], col: DARKM, m: 'rubber' },
+  ...[0.02, 0.05, 0.08].map((z) => ({ name: 'gripRing', c: [0, -0.001, z], s: [0.028, 0.034, 0.006], col: [0.16, 0.16, 0.17], m: 'rubber' })),
   { name: 'pommel', c: [0, 0, 0.108], s: [0.03, 0.036, 0.012], col: STEELB, m: 'steel' },
-  { name: 'guard', c: [0, 0, -0.008], s: [0.022, 0.06, 0.012], col: STEELB, m: 'steel' },
+  { name: 'lanyard', c: [0, 0, 0.118], s: [0.008, 0.016, 0.008], col: [0.9, 0.35, 0.1], m: 'cloth' },
+  { name: 'guard', c: [0, 0, -0.008], s: [0.022, 0.066, 0.012], col: STEELB, m: 'steel' },
   { name: 'blade', c: [0, 0.006, -0.09], s: [0.006, 0.032, 0.16], col: [0.8, 0.82, 0.86], m: 'steel' },
+  { name: 'fuller', c: [0, 0.008, -0.08], s: [0.0068, 0.006, 0.11], col: [0.42, 0.44, 0.48], m: 'steel' },
   { name: 'edge', c: [0, -0.011, -0.092], s: [0.0065, 0.004, 0.15], col: [0.95, 0.96, 0.98], m: 'steel' },
-  { name: 'tip', c: [0, 0.0, -0.18], s: [0.005, 0.018, 0.03], col: [0.85, 0.86, 0.9], m: 'steel' },
+  ...ser(5, -0.03, 0.012, 0.022, 0.006),
+  { name: 'tip', c: [0, -0.002, -0.178], s: [0.005, 0.016, 0.032], rx: -0.35, col: [0.85, 0.86, 0.9], m: 'steel' },
 ], { dmg: 55, range: 2.1, arc: 0.32, swing: 0.36, lunge: 5, hits: 1, style: 'stab' }, { moveMul: 1.12 });
 melee('katana', 'KATANA', [
+  // a diamond-wrapped hilt, a round guard, a brass collar, a long curved-looking blade with a pale temper line
   { name: 'grip', c: [0, 0, 0.06], s: [0.03, 0.034, 0.22], col: [0.08, 0.06, 0.06], m: 'cloth' },
-  { name: 'wrap', c: [0, 0, 0.06], s: [0.032, 0.02, 0.2], col: [0.75, 0.12, 0.1], m: 'cloth' },
+  ...[0, 1, 2, 3, 4, 5, 6].map((i) => ({ name: 'wrap', c: [0, 0, -0.035 + i * 0.03], s: [0.033, 0.024, 0.016], rz: 0.785, col: [0.75, 0.12, 0.1], m: 'cloth' })),
+  { name: 'kashira', c: [0, 0, 0.175], s: [0.034, 0.038, 0.014], col: [0.12, 0.1, 0.09], m: 'metal' },
   { name: 'tsuba', c: [0, 0, -0.06], s: [0.075, 0.075, 0.01], col: [0.7, 0.55, 0.2], m: 'brass', shape: 'cyl' },
+  { name: 'habaki', c: [0, 0.002, -0.08], s: [0.012, 0.034, 0.03], col: [0.85, 0.65, 0.25], m: 'brass' },
   { name: 'blade', c: [0, 0.004, -0.42], s: [0.008, 0.03, 0.7], col: [0.82, 0.84, 0.88], m: 'steel' },
+  { name: 'hamon', c: [0, -0.004, -0.42], s: [0.0086, 0.004, 0.68], col: [0.93, 0.94, 0.96], m: 'steel' },
   { name: 'edge', c: [0, -0.011, -0.42], s: [0.0085, 0.006, 0.7], col: [0.97, 0.98, 1], m: 'steel', em: 0.15 },
-  { name: 'tip', c: [0, -0.002, -0.79], s: [0.007, 0.022, 0.05], col: [0.9, 0.92, 0.95], m: 'steel' },
+  { name: 'tip', c: [0, -0.004, -0.785], s: [0.007, 0.024, 0.06], rx: -0.5, col: [0.9, 0.92, 0.95], m: 'steel' },
 ], { dmg: 75, range: 2.7, arc: 0.62, swing: 0.52, lunge: 4, hits: 2, style: 'slash' }, { moveMul: 1.06 });
 melee('hammer', 'SLEDGEHAMMER', [
-  { name: 'shaft', c: [0, 0, -0.12], s: [0.034, 0.034, 0.62], col: [0.5, 0.36, 0.22], m: 'wood' },
-  { name: 'grip', c: [0, 0, 0.08], s: [0.04, 0.04, 0.16], col: DARKM, m: 'rubber' },
+  // a hickory shaft with a taped grip, a steel collar and a heavy forged head with bevelled striking faces
+  { name: 'shaft', c: [0, 0, -0.12], s: [0.034, 0.034, 0.62], col: [0.5, 0.36, 0.22], m: 'wood', shape: 'cyl' },
+  { name: 'grip', c: [0, 0, 0.08], s: [0.042, 0.042, 0.16], col: DARKM, m: 'rubber', shape: 'cyl' },
+  ...[0.01, 0.05, 0.09, 0.13].map((z) => ({ name: 'tape', c: [0, 0, z], s: [0.044, 0.044, 0.008], col: [0.85, 0.75, 0.1], m: 'rubber', shape: 'cyl' })),
+  { name: 'collar', c: [0, 0, -0.37], s: [0.05, 0.05, 0.05], col: [0.25, 0.26, 0.28], m: 'steel' },
   { name: 'head', c: [0, 0, -0.44], s: [0.2, 0.095, 0.095], col: [0.3, 0.31, 0.34], m: 'steel' },
-  { name: 'face', c: [0.102, 0, -0.44], s: [0.006, 0.1, 0.1], col: [0.7, 0.72, 0.76], m: 'steel' },
-  { name: 'face2', c: [-0.102, 0, -0.44], s: [0.006, 0.1, 0.1], col: [0.7, 0.72, 0.76], m: 'steel' },
+  { name: 'face', c: [0.106, 0, -0.44], s: [0.012, 0.085, 0.085], col: [0.7, 0.72, 0.76], m: 'steel' },
+  { name: 'face2', c: [-0.106, 0, -0.44], s: [0.012, 0.085, 0.085], col: [0.7, 0.72, 0.76], m: 'steel' },
+  { name: 'wedge', c: [0, 0.049, -0.44], s: [0.03, 0.004, 0.02], col: [0.55, 0.56, 0.6], m: 'steel' },
   { name: 'band', c: [0, 0, -0.44], s: [0.205, 0.1, 0.02], col: [0.92, 0.1, 0.08], m: 'paint' },
 ], { dmg: 120, range: 2.4, arc: 0.4, swing: 0.95, lunge: 2.5, hits: 1, style: 'smash', walls: 220 }, { moveMul: 0.96 });
 export const MELEE = ['knife', 'katana', 'hammer'];

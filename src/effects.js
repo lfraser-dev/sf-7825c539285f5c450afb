@@ -127,7 +127,7 @@ export class Effects {
         d.vel = d.vel.map((v) => v * Math.exp(-4 * dt));
         continue;
       }
-      d.vel[1] -= 20 * dt;
+      d.vel[1] -= 20 * (d.grav ?? 1) * dt;
       const hy = d.size[1] / 2;
       const nx = d.pos[0] + d.vel[0] * dt, ny = d.pos[1] + d.vel[1] * dt, nz = d.pos[2] + d.vel[2] * dt;
       let px = d.pos[0], py = d.pos[1], pz = d.pos[2];

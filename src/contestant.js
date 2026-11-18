@@ -175,6 +175,53 @@ export const POSES = {
     p.elbowOut = 1.2; p.mouth = 0.5; p.breath = t;
     return p;
   },
+  // ---- dances (build 0.73)
+  danceFloss(t) {
+    // hips one way, both arms swung the other, one in front of you and one behind, back and forth
+    const a = Math.sin(t * 7), f = Math.sign(Math.cos(t * 7)) * 0.16;
+    const p = { pelvis: [a * 0.07, 0.93, 0], lean: 0.02, twist: -a * 0.12, head: [a * 0.12, 0.02] };
+    standLegs(p, 0.15, 0);
+    p.hands = [[-0.16 - a * 0.28, 0.82, -f], [0.16 - a * 0.28, 0.82, f]];
+    p.elbowOut = 0.4; p.mouth = 0.6; p.breath = t;
+    return p;
+  },
+  danceRobot(t) {
+    // stiff, snapping from one pose to the next on the beat
+    const q = Math.floor(t * 3.2) % 4, P = [
+      [[-0.32, 1.25, -0.2], [0.3, 0.95, -0.25], [0.15, 0]], [[-0.3, 0.95, -0.25], [0.32, 1.25, -0.2], [-0.15, 0]],
+      [[-0.3, 1.32, -0.35], [0.3, 1.32, -0.35], [0, -0.08]], [[-0.25, 1.05, -0.4], [0.25, 1.05, -0.4], [0.2, 0.06]]][q];
+    const p = { pelvis: [0, 0.95 - (q % 2) * 0.02, 0], lean: 0, twist: [0.15, -0.15, 0, 0][q], head: P[2] };
+    standLegs(p, 0.17, 0);
+    p.hands = [P[0], P[1]]; p.elbowOut = 1.4; p.breath = 0;
+    return p;
+  },
+  danceDab(t) {
+    // the dab: head tucked into one elbow, the other arm thrown out; re-dab every couple of seconds
+    const c = (t % 1.8) / 1.8, k = c < 0.12 ? c / 0.12 : c > 0.85 ? (1 - c) / 0.15 : 1, s = k * k * (3 - 2 * k);
+    const p = { pelvis: [0, 0.95 - s * 0.03, 0], lean: 0.1 * s, twist: -0.25 * s, head: [-0.35 * s, 0.35 * s] };
+    standLegs(p, 0.2, 0.05);
+    p.hands = [[-0.22 + s * 0.02, 1.0 + s * 0.48, -0.1 - s * 0.14], [0.22 + s * 0.42, 1.0 + s * 0.48, -0.08 - s * 0.05]];
+    p.elbowOut = 1.3; p.mouth = 0.2; p.breath = t;
+    return p;
+  },
+  danceDisco(t) {
+    // point up to the right, then down to the left, hips rolling with it
+    const a = Math.sin(t * 4.4), u = Math.max(0, a), d = Math.max(0, -a);
+    const p = { pelvis: [a * 0.06, 0.94 + Math.abs(a) * 0.02, 0], lean: -0.04, twist: a * 0.25, head: [a * 0.3, -0.1 * u + 0.1 * d] };
+    standLegs(p, 0.2, a * 0.06);
+    p.hands = [[-0.18, 1.05, -0.12], [0.2 + u * 0.2 - d * 0.5, 1.1 + u * 0.65 - d * 0.35, -0.15 - u * 0.1]];
+    p.elbowOut = 1.1; p.mouth = 0.5; p.breath = t;
+    return p;
+  },
+  devOverride(t) {
+    // SYSTEM OVERRIDE (dev only): lifts off the floor, arms out, head back, and glitches
+    const lift = 0.18 + Math.sin(t * 1.6) * 0.05, g = Math.floor(t * 12) % 7 === 0 ? (Math.random() - 0.5) * 0.08 : 0;
+    const p = { pelvis: [g, 0.95 + lift, 0], lean: -0.15, twist: Math.sin(t * 0.9) * 0.3, head: [Math.sin(t * 0.9) * 0.3, -0.35] };
+    p.feet = [[-0.12, 0.05 + lift + 0.04, 0.06], [0.12, 0.05 + lift + 0.08, -0.02]];
+    p.hands = [[-0.68, 1.45 + lift + Math.sin(t * 2) * 0.05, -0.05], [0.68 + g, 1.45 + lift - Math.sin(t * 2) * 0.05, -0.05]];
+    p.elbowOut = 0.4; p.mouth = 0.7; p.breath = t;
+    return p;
+  },
   victoryStare(t) {
     const p = { pelvis: [0, 0.95, 0], lean: -0.06, twist: 0.08, head: [0, 0.06 + Math.sin(t * 0.9) * 0.03] };
     standLegs(p, 0.22, 0);

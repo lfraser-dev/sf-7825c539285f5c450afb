@@ -277,7 +277,7 @@ export class Player {
       if (now > cap) { this.vel[0] *= cap / now; this.vel[2] *= cap / now; }
     }
 
-    const g = onWall ? this.wallRun.grav : this.dash ? 0 : pulling ? GRAVITY * 0.3 : diving ? 0 : GRAVITY;
+    const g = (onWall ? this.wallRun.grav : this.dash ? 0 : pulling ? GRAVITY * 0.3 : diving ? 0 : GRAVITY) * (this.gravMul || 1);
     this.vel[1] -= g * dt;
     const fallSpeed = this.vel[1];
 

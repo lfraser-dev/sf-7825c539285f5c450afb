@@ -59,7 +59,7 @@ const MACHINES = [['revive', 'spawn', 7, 9.2, 0, -1], ['speed', 'labs', 21, -9.2
 const BOX = { room: 'labs', x: 27, z: 9.3, yaw: 0, cost: 950 };
 const AMP = { room: 'power', x: 21, z: 22, cost: 5000 };
 const POWER = { room: 'power', x: 31.75, z: 15, nx: -1, nz: 0 };
-export const BOX_POOL = ['rg1', 'minigun', 'amr', 'sniper_x', 'shotgun_d', 'lmg', 'rk74', 'autoshotgun', 'dmr_i', 'kv_d', 'bruiser', 'hc50', 'revolver_h',
+export const BOX_POOL = ['rg1', 'ak_p19', 'ak_zu9', 'ak_hc50', 'minigun', 'amr', 'sniper_x', 'shotgun_d', 'lmg', 'rk74', 'autoshotgun', 'dmr_i', 'kv_d', 'bruiser', 'hc50', 'revolver_h',
   'burst_a', 'pistol_a', 'cr56', 'rt7', 'zu9', 'pdx', 'hx17', 'slug', 'sniper'];
 
 function buildBunker(world, A) {

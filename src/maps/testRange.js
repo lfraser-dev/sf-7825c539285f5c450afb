@@ -204,6 +204,7 @@ export default {
       { name: 'MACHINE GUNS', o: [AR.x0, 1.75, 40], n: [1, 0], fam: 'lmg', w: 1.4, gap: 2.25, col: [0.9, 0.2, 0.25] },
       { name: 'SIDEARMS', o: [AR.x1, 1.6, 41.6], n: [-1, 0], fam: 'pistol', w: 0.55, gap: 0.85, col: [0.75, 0.45, 1] },
       { name: 'MELEE', o: [AR.x1, 1.6, 37.8], n: [-1, 0], ids: ['knife', 'katana', 'hammer'], w: 0.9, gap: 1.0, col: [0.9, 0.9, 0.95] },
+      { name: 'AKIMBO', o: [-7.2, 1.6, AR.z0], n: [0, 1], ids: ['ak_p19', 'ak_zu9', 'ak_hc50'], w: 0.8, gap: 1.2, col: [1, 0.3, 0.6] },
     ],
     ammo: [AR.x1 - 0.45, 1.15, 35.4],
   },

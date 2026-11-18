@@ -1442,6 +1442,25 @@ melee('hammer', 'SLEDGEHAMMER', [
   { name: 'band', c: [0, 0, -0.44], s: [0.1, 0.205, 0.02], col: [0.92, 0.1, 0.08], m: 'paint' },
 ], { dmg: 120, range: 2.4, arc: 0.4, swing: 0.95, lunge: 2.5, hits: 1, style: 'smash', walls: 220, tilt: 1.2 }, { moveMul: 0.96, oneHanded: false, grip: [0, 0, 0.1], foreGrip: [0, 0, -0.16], hip: [0.17, -0.22, -0.4] });
 export const MELEE = ['knife', 'katana', 'hammer'];
+
+// ---------------------------------------------------------------- akimbo (build 0.73): a gun in each hand
+// Double the mag, faster fire (left, right, left, right), a bit less accurate, no aiming down sights, longer reload.
+const AKIMBO_RANGE = { pistol: 20, zu9: 16, hc50: 26, mp: 13 };
+const akimbo = (id, base, name, k = {}) => {
+  const w = clone(WEAPONS[base]);
+  Object.assign(w, {
+    id, name, type: 'AKIMBO', akimbo: true, oneHanded: true, style: 'akimbo', kit: null, laser: null, range: AKIMBO_RANGE[base] ?? 18,
+    mag: w.mag * 2, rpm: Math.round(w.rpm * (k.rpm ?? 1.5)), dmg: Math.round(w.dmg * (k.dmg ?? 0.9)),
+    reload: +(w.reload * 1.4).toFixed(2), reloadEmpty: +((w.reloadEmpty ?? w.reload) * 1.4).toFixed(2), reloadAnim: 'akimbo',
+    spread: { ...w.spread, base: w.spread.base * 1.5, bloom: w.spread.bloom * 1.3, bloomMax: w.spread.bloomMax * 1.3 },
+    recoil: { ...w.recoil, vm: w.recoil.vm * 0.25 }, hip: [Math.max(0.15, w.hip[0]), w.hip[1] - 0.01, w.hip[2]], moveMul: (w.moveMul ?? 1) * 0.98,
+  });
+  WEAPONS[id] = w;
+};
+akimbo('ak_p19', 'pistol', 'DUAL P-19', { rpm: 1.6 });
+akimbo('ak_zu9', 'zu9', 'DUAL ZU-9', { rpm: 1.0, dmg: 0.85 });
+akimbo('ak_hc50', 'hc50', 'DUAL HAND CANNONS', { rpm: 1.4, dmg: 0.95 });
+export const AKIMBO = ['ak_p19', 'ak_zu9', 'ak_hc50'];
 export const MELEE_DESC = {
   knife: 'Quick stabs that lunge you at whoever is in front of you. Two hits, or one in the head.',
   katana: 'A wide slash that can cut two people at once. Long reach.',
@@ -1450,6 +1469,9 @@ export const MELEE_DESC = {
 
 // what each gun is, in a line (the armoury's info card)
 export const GUN_DESC = {
+  ak_p19: 'A P-19 in each hand. Left, right, left, right: twice the bullets, no aiming down sights.',
+  ak_zu9: 'Two tiny SMGs at once. A wall of bullets up close; hopeless at range.',
+  ak_hc50: 'Two hand cannons. Huge hits from both hands, a long reload.',
   ar: 'The all-rounder. Steady full auto that works at almost any range.',
   burst: 'Three-round bursts. Land all three on the head and they drop.',
   hx17: 'Heavy rounds, slower fire. Hits hard at mid range.',

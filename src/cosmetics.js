@@ -1,6 +1,7 @@
 // Cosmetics: outfit pieces + weapon skins, the shop catalogue, your wallet and what you own / wear.
 // Everything is saved in this browser. Earning credits will come with the battle pass.
 import { CLASSES, CLASS_ORDER } from './classes.js';
+import { PROFILE_SLOTS, PROFILE_ITEMS } from './profile.js';
 
 export const CURRENCY = 'CREDITS';
 const START_CREDITS = 10000;
@@ -19,7 +20,8 @@ export const SLOTS = [
   { id: 'neck', name: 'NECK' },
   { id: 'body', name: 'SKIN TONE' },
   { id: 'wskin', name: 'WEAPON SKIN' },
-  { id: 'emote', name: 'VICTORY POSE' },
+  { id: 'emote', name: 'EMOTE / DANCE' },
+  ...PROFILE_SLOTS,
 ];
 
 export const RARITY = {
@@ -27,7 +29,10 @@ export const RARITY = {
   rare: { name: 'RARE', color: [0.2, 0.55, 1] },
   epic: { name: 'EPIC', color: [0.68, 0.3, 1] },
   legendary: { name: 'LEGENDARY', color: [1, 0.68, 0.08] },
+  dev: { name: 'DEV EXCLUSIVE', color: [0.15, 1, 0.55] },
 };
+// dev mode: the dev-only items show up and are yours (main.js checks the saved dev key properly once the page loads)
+export const DEV = { on: (() => { try { return !!localStorage.getItem('semifinals.dev'); } catch { return false; } })() };
 
 const C = {
   red: [0.92, 0.1, 0.08], white: [0.95, 0.95, 0.96], black: [0.08, 0.08, 0.09], char: [0.2, 0.2, 0.22], grey: [0.5, 0.51, 0.54],
@@ -163,6 +168,11 @@ export const ITEMS = {
   e_guns: { slot: 'emote', name: 'FINGER GUNS', price: 1400, rarity: 'rare', apply: { emote: 'victoryGuns' }, sw: [0.3, 0.6, 1], fx: 'Pew pew at the camera.' },
   e_stare: { slot: 'emote', name: 'COLD STARE', price: 1800, rarity: 'epic', apply: { emote: 'victoryStare' }, sw: [0.5, 0.2, 0.8], fx: 'Arms crossed. Not impressed.' },
   e_dance: { slot: 'emote', name: 'SIDE STEP', price: 2500, rarity: 'epic', apply: { emote: 'victoryDance' }, sw: [1, 0.8, 0.2], fx: 'A little dance, side to side.' },
+  e_floss: { slot: 'emote', name: 'THE FLOSS', price: 1200, rarity: 'rare', apply: { emote: 'danceFloss' }, sw: [0.3, 0.8, 1], fx: 'Hips one way, arms the other.' },
+  e_robot: { slot: 'emote', name: 'ROBOT', price: 1200, rarity: 'rare', apply: { emote: 'danceRobot' }, sw: [0.7, 0.72, 0.78], fx: 'Beep. Boop. Snap to the beat.' },
+  e_dab: { slot: 'emote', name: 'DAB', price: 800, rarity: 'common', apply: { emote: 'danceDab' }, sw: [1, 0.3, 0.3], fx: 'A classic.' },
+  e_disco: { slot: 'emote', name: 'DISCO FEVER', price: 2200, rarity: 'epic', apply: { emote: 'danceDisco' }, sw: [1, 0.35, 0.85], fx: 'Point up, point down, roll those hips.' },
+  e_dev: { slot: 'emote', name: 'SYSTEM OVERRIDE', price: 0, rarity: 'dev', dev: true, apply: { emote: 'devOverride' }, sw: [0.15, 1, 0.55], fx: 'Lift off the floor and glitch. Dev only.', live: true },
   // ---- live fabrics: clothes painted by the shader, like the live gun skins (they move)
   t_fx_holo: { slot: 'top', name: 'HOLO TEE', price: 2600, rarity: 'epic', apply: { top: [0.7, 0.5, 1.0], topStyle: 'tee', logo: null, print: null, fxTop: 46 }, fx: 'An oil-slick rainbow that slides as the camera moves.', live: true },
   t_fx_circuit: { slot: 'top', name: 'LIVE WIRE HOODIE', price: 3600, rarity: 'legendary', apply: { top: [0.1, 0.8, 0.72], topStyle: 'hoodie', logo: null, fxTop: 47 }, fx: 'Light pulses run along circuit traces all over it.', live: true },
@@ -187,6 +197,7 @@ export const ITEMS = {
   w_aurum: { slot: 'wskin', name: 'AURUM', price: 5000, rarity: 'legendary', gun: { tex: 52, sw: [1, 0.8, 0.3] }, fx: 'Polished gold with light sweeping down it. Glows while you fire.', live: true },
 };
 
+Object.assign(ITEMS, PROFILE_ITEMS);
 export const FEATURED = ['w_molten', 'w_darkmatter', 'h_redmask'];
 
 const ICON = { head: '◓', top: '▀', outer: '▣', legs: '▥', shoes: '▂', gloves: '✋', neck: '◡', body: '●', wskin: '⌐' };
@@ -222,9 +233,9 @@ export function loadCosmetics() {
   return st;
 }
 export function saveCosmetics(st) { try { localStorage.setItem(KEY, JSON.stringify(st)); } catch { /* ignore */ } }
-export const owns = (st, id) => ITEMS[id]?.price === 0 || st.owned.includes(id);
-export function defaultFor(slot) { return Object.keys(ITEMS).find((id) => ITEMS[id].slot === slot); }
-export function itemsFor(slot) { return Object.entries(ITEMS).filter(([, it]) => it.slot === slot).map(([id, it]) => ({ id, ...it })); }
+export const owns = (st, id) => { const it = ITEMS[id]; if (!it) return false; if (it.dev) return DEV.on; if (it.req) return st.owned.includes(id); return it.price === 0 || st.owned.includes(id); };
+export function defaultFor(slot) { return Object.keys(ITEMS).find((id) => ITEMS[id].slot === slot && !ITEMS[id].dev && !ITEMS[id].req); }
+export function itemsFor(slot) { return Object.entries(ITEMS).filter(([, it]) => it.slot === slot && (!it.dev || DEV.on)).map(([id, it]) => ({ id, ...it })); }
 
 export function buy(st, id) {
   const it = ITEMS[id];

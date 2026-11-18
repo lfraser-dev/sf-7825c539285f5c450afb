@@ -12,7 +12,8 @@ import { buildDef, ratings } from './attachments.js';
 import { CLASSES, CLASS_ORDER, ABILITIES, HEAVIES, SIDEARMS, THROWABLES, THROW_ORDER, TAKEDOWNS, takedownsFor, loadLoadout, saveLoadout } from './classes.js';
 import { Contestant } from './contestant.js';
 import { Thumbs } from './thumbs.js';
-import { SLOTS as CSLOTS, RARITY, ITEMS, FEATURED, CURRENCY, loadCosmetics, saveCosmetics, owns, itemsFor, buy, buildOutfit, gunSkinFor, skinDef, swatch, iconFor } from './cosmetics.js';
+import { SLOTS as CSLOTS, RARITY, ITEMS, FEATURED, CURRENCY, loadCosmetics, saveCosmetics, owns, itemsFor, buy, buildOutfit, gunSkinFor, skinDef, swatch, iconFor, DEV } from './cosmetics.js';
+import { isProfileSlot, previewHTML, playerCardHTML, badgeSVG, titleHTML, sprayDef, petParts, charmParts, ACH_TEXT, PROFILE_DEFAULTS } from './profile.js';
 import { Bench } from './bench.js';
 import { anchorsFor, optionsFor, SLOTS } from './attachments.js';
 const benchPV = mat4();
@@ -710,8 +711,10 @@ function hitTarget(dummy, dmg, head, point, dir, wname, burn = false) {
   lastHitPt = point;
   dummy.lastHead = head;
   dummy.lastByMelee = !!weapon()?.def.melee;
+  dummy.lastMineT = time;
   if (tdm.active && dummy.zombie) { dmg = tdm.onHit?.(dummy, head, dmg) ?? dmg; }
   if (buffOn('overdrive') && wname !== 'BULL CHARGE') dmg *= 1.25;
+  if (devOn('ohk') && !dummy.remote) dmg = Math.max(dmg, 99999);
   const num = { pos: [...point], amount: dmg, head, burn, t: 0, el: null, drift: Math.random() - 0.5 };
   if (dummy.remote) {
     // another player online: tell them; they take the damage on their side
@@ -905,6 +908,181 @@ function earn(n) { cosmetics.credits += n; matchEarned += n; saveCosmetics(cosme
 
 // ---- secret codes: click your credits on the menu to type one in. Only the hash is stored here, so reading the
 // code doesn't give the code away.
+// ---------- profile (build 0.73): badges, titles, calling cards, sprays, death effects, charms, pets ----------
+function myProfile() {
+  const eq = cosmetics.equip[classLo.cls] || {};
+  const out = {};
+  for (const k of Object.keys(PROFILE_DEFAULTS)) out[k] = ITEMS[eq[k]] && owns(cosmetics, eq[k]) ? eq[k] : PROFILE_DEFAULTS[k];
+  return out;
+}
+// wear an item; profile items (badge, title, card...) go on every class at once
+function equipItem(cls, id) {
+  const it = ITEMS[id];
+  if (it.global) for (const c of CLASS_ORDER) cosmetics.equip[c][it.slot] = id;
+  else cosmetics.equip[cls][it.slot] = id;
+}
+// earned items: handed out once you've done the thing
+const ACH = {
+  zbest10: () => { try { return +(localStorage.getItem('sf-zbest') || 0) >= 10; } catch { return false; } },
+  lv20: () => levelInfo(progress.xp).level >= 20,
+};
+function grantAchievements() {
+  let got = false;
+  for (const [id, it] of Object.entries(ITEMS)) if (it.req && !cosmetics.owned.includes(id) && ACH[it.req]?.()) { cosmetics.owned.push(id); got = true; banner('UNLOCKED', it.name, 'good', 2); }
+  if (got) saveCosmetics(cosmetics);
+}
+const myCardHTML = (extra = '') => { const P = myProfile(); return playerCardHTML({ name: lobby.name || 'PLAYER', card: P.card, badge: P.badge, title: P.title, lv: levelInfo(progress.xp).level, extra }); };
+
+// ---- death effects: what people burst into when you finish them (dfx_coins is the classic, handled by onShatter)
+function deathFx(bot, kind) {
+  if (!kind || kind === 'dfx_coins') return false;
+  const c = bodyPt(bot), R = () => Math.random() - 0.5;
+  const last = () => effects.debris[effects.debris.length - 1];
+  if (kind === 'dfx_smoke') {
+    for (let i = 0; i < 4; i++) effects.dust([c[0] + R() * 0.4, c[1] + i * 0.25, c[2] + R() * 0.4], 10);
+    for (let i = 0; i < 22; i++) { effects.spawnPiece(c, [0.16, 0.16, 0.16], [R() * 2, 0.8 + Math.random() * 1.5, R() * 2], [0.22, 0.22, 0.24], 1.2 + Math.random(), 0); Object.assign(last(), { noGravity: true, shape: 'sphere' }); }
+    sounds.cloak?.();
+  } else if (kind === 'dfx_confetti') {
+    const cols = [[1, 0.2, 0.4], [0.2, 0.7, 1], [1, 0.85, 0.15], [0.3, 1, 0.45], [0.8, 0.3, 1], [1, 0.5, 0.1]];
+    for (let i = 0; i < 70; i++) { effects.spawnPiece(c, [0.05, 0.004, 0.03], [R() * 7, 4 + Math.random() * 6, R() * 7], cols[i % cols.length], 2 + Math.random() * 1.5, 0.3); last().grav = 0.25; }
+    sounds.pickup?.();
+  } else if (kind === 'dfx_pixels') {
+    for (let i = 0; i < 50; i++) { const h = Math.random() * 6.28; effects.spawnPiece([c[0] + R() * 0.4, c[1] + R() * 0.9, c[2] + R() * 0.4], [0.08, 0.08, 0.08], [R() * 4, 2 + Math.random() * 4, R() * 4], [0.5 + 0.5 * Math.cos(h), 0.5 + 0.5 * Math.cos(h + 2.1), 0.5 + 0.5 * Math.cos(h + 4.2)], 1.5 + Math.random(), 0.6); last().shape = 0; }
+    sounds.click?.(900, 0.25);
+  } else if (kind === 'dfx_balloons') {
+    const cols = [[1, 0.2, 0.3], [0.2, 0.6, 1], [1, 0.85, 0.2], [0.4, 1, 0.5], [0.9, 0.4, 1]];
+    for (let i = 0; i < 9; i++) { effects.spawnPiece([c[0] + R() * 0.5, c[1] + R() * 0.4, c[2] + R() * 0.5], [0.24, 0.3, 0.24], [R() * 0.6, 1.4 + Math.random() * 0.8, R() * 0.6], cols[i % cols.length], 4 + Math.random(), 0.25); Object.assign(last(), { grav: -0.07, shape: 'sphere', spin: [0, 0, 0] }); }
+    effects.dust(bot.pos, 5);
+  } else if (kind === 'dfx_lightning') {
+    let q = [c[0], c[1] + 14, c[2]];
+    for (let i = 0; i < 8; i++) { const t = (i + 1) / 8, nx = [c[0] + (i < 7 ? R() * 1.8 : 0), c[1] + 14 * (1 - t), c[2] + (i < 7 ? R() * 1.8 : 0)]; effects.beam(q, nx, [0.8, 0.9, 1], 0.45, 0.07); q = nx; }
+    effects.sparks(c, 40, [0.75, 0.88, 1], 9, 0.6, 0.04, 3);
+    effects.dust(bot.pos, 10);
+    sounds.boom?.(0.6); flashT = Math.max(flashT, 0.15);
+  } else if (kind === 'dfx_blackhole') {
+    for (let i = 0; i < 70; i++) { const a = Math.random() * 6.283, e = R() * 3, r = 1.2 + Math.random() * 1.6, life = 0.45; const off = [Math.cos(a) * Math.cos(e) * r, Math.sin(e) * r * 0.5, Math.sin(a) * Math.cos(e) * r]; effects.spawnPiece(c.map((v, k) => v + off[k]), [0.05, 0.05, 0.05], off.map((v) => -v / life), i % 3 ? [0.6, 0.2, 1] : [1, 1, 1], life, 1); last().noGravity = true; }
+    effects.spawnPiece(c, [0.35, 0.35, 0.35], [0, 0, 0], [0.02, 0, 0.04], 0.6, 0); Object.assign(last(), { noGravity: true, shape: 'sphere' });
+    setTimeout(() => effects.sparks(c, 30, [0.7, 0.3, 1], 7, 0.5, 0.03, 1), 450);
+    sounds.boom?.(0.3);
+  } else if (kind === 'dfx_dev') {
+    // DELETED: red, green and blue pixels jitter apart, freeze, and blink out
+    const cols = [[1, 0.1, 0.2], [0.1, 1, 0.4], [0.2, 0.4, 1]];
+    for (let i = 0; i < 80; i++) { effects.spawnPiece([c[0] + R() * 0.5, c[1] + R() * 1.2, c[2] + R() * 0.5], [0.07, 0.07, 0.02], [R() * 1.5, R() * 1.5, R() * 1.5], cols[i % 3], 0.5 + Math.random() * 0.9, 1); Object.assign(last(), { noGravity: true, shape: 0, spin: [0, 0, 0] }); }
+    effects.beam([c[0] - 1, c[1], c[2]], [c[0] + 1, c[1], c[2]], [0.2, 1, 0.5], 0.25, 0.02);
+    effects.beam([c[0], c[1] - 1, c[2]], [c[0], c[1] + 1, c[2]], [1, 0.1, 0.3], 0.25, 0.02);
+    sounds.click?.(3000, 0.3);
+  } else return false;
+  return true;
+}
+
+// ---- sprays: press Y to tag the wall in front of you (others see it online)
+const sprays = [];
+let sprayCd = 0;
+function addSpray(id, pos, n) {
+  const up0 = Math.abs(n[1]) > 0.9 ? [0, 0, -1] : [0, 1, 0];
+  const r = norm(cross(up0, n)), u = cross(n, r);
+  sprays.push({ id, pos, n, r, u, born: performance.now() });
+  if (sprays.length > 8) sprays.shift();
+}
+function spray() {
+  if (sprayCd > 0 || bench.open) return;
+  updateCamera();
+  const hit = world.raycast(camEye, camFwd, 6, true, (b) => b.tag === 'bot' || b.tag === 'dummy');
+  if (!hit) { sounds.denied?.(); return; }
+  const id = myProfile().spray, pos = hit.point.map((v, k) => v + hit.normal[k] * 0.012);
+  addSpray(id, pos, hit.normal);
+  sprayCd = 2.5;
+  sounds.spray ? sounds.spray() : sounds.cloth?.();
+  effects.dust(pos, 4);
+  if (online.active) online.send({ t: 'spr', id: online.myId, k: id, p: pos.map((v) => +v.toFixed(2)), n: hit.normal.map((v) => +v.toFixed(3)) });
+}
+const sprayPool = [];
+function sprayParts(out) {
+  let n = 0;
+  for (const sp of sprays) {
+    const age = (performance.now() - sp.born) / 1000, S = sprayDef(sp.id), px = 0.065, fade = age > 90 ? Math.max(0, 1 - (age - 90) / 10) : 1;
+    // it fades in as it's sprayed on (the first half second)
+    const on = Math.min(1, age / 0.5);
+    S.px.forEach((row, y) => [...row].forEach((ch, x) => {
+      const col = S.pal[ch];
+      if (!col || (y * 12 + x) / 144 > on) return;
+      const m = sprayPool[n] || (sprayPool[n] = mat4()); n++;
+      const ox = (x - 5.5) * px, oy = (5.5 - y) * px, s = [px * 1.02, px * 1.02, 0.004];
+      const c = [0, 1, 2].map((k) => sp.pos[k] + sp.r[k] * ox + sp.u[k] * oy);
+      m.set([sp.r[0] * s[0], sp.r[1] * s[0], sp.r[2] * s[0], 0, sp.u[0] * s[1], sp.u[1] * s[1], sp.u[2] * s[1], 0, sp.n[0] * s[2], sp.n[1] * s[2], sp.n[2] * s[2], 0, c[0], c[1], c[2], 1]);
+      out.push({ model: m, scale: s, color: col, emissive: sp.id === 'sp_dev' ? 0.8 : 0.15, edges: 0, alpha: fade < 1 ? fade : undefined });
+    }));
+  }
+}
+function updateSprays(dt) {
+  sprayCd -= dt;
+  while (sprays.length && performance.now() - sprays[0].born > 100000) sprays.shift();
+}
+
+// ---- the DEV passcode: click the season/build line three times on the home page, type the code
+const DEV_CODE_H = 'd9ef8287635170725c2fb7d1f9f98fce4ede60597b6c60f54f3f36f85b263831', DEV_TOK_H = 'f64fa347b3b4ad3acfc568a9832114b20c67d15e1fd65669f3a3a220a3203e35';
+const sha256 = async (s) => [...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s)))].map((b) => b.toString(16).padStart(2, '0')).join('');
+let devFlags = (() => { try { return JSON.parse(localStorage.getItem('semifinals.devflags') || '{}') || {}; } catch { return {}; } })();
+const devOn = (k) => DEV.on && !!devFlags[k] && tdm !== online;      // dev cheats never work online
+function devSanitize() {
+  for (const c of CLASS_ORDER) for (const sl of CSLOTS) { const id = cosmetics.equip[c][sl.id]; if (ITEMS[id]?.dev && !DEV.on) cosmetics.equip[c][sl.id] = Object.keys(ITEMS).find((k) => ITEMS[k].slot === sl.id && !ITEMS[k].dev && !ITEMS[k].req); }
+}
+async function devCheck() {
+  let tok = null;
+  try { tok = localStorage.getItem('semifinals.dev'); } catch { /* ignore */ }
+  const ok = !!tok && !!crypto.subtle && (await sha256(tok)) === DEV_TOK_H;
+  if (!ok && tok) { try { localStorage.removeItem('semifinals.dev'); } catch { /* ignore */ } }
+  DEV.on = ok;
+  if (!ok) { devSanitize(); saveCosmetics(cosmetics); }
+  renderMenu();
+}
+async function tryDevCode(txt) {
+  const code = String(txt || '').trim().toUpperCase().replace(/\s+/g, '');
+  if (!code || !crypto.subtle || (await sha256(code)) !== DEV_CODE_H) return false;
+  const tok = await sha256('sf-dev:' + code);
+  try { localStorage.setItem('semifinals.dev', tok); } catch { /* ignore */ }
+  DEV.on = true;
+  for (const id of ['bd_dev', 'ti_dev', 'cd_dev']) equipItem(classLo.cls, id);
+  saveCosmetics(cosmetics);
+  refreshGuns(); renderMenu();
+  return true;
+}
+function openDevCode() {
+  if ($('dev-box')) return;
+  const box = el('div'); box.id = 'dev-box';
+  box.innerHTML = `<div class="dv-card"><h3>&lt;/&gt; RESTRICTED</h3><p>Developer access only.</p><input id="dv-in" type="password" autocomplete="off" spellcheck="false" placeholder="PASSCODE"><div class="dv-msg"></div><div class="cw-btns"><button type="button" id="dv-go">UNLOCK</button><button type="button" id="dv-x" class="alt">CLOSE</button></div></div>`;
+  document.body.append(box);
+  const inp = box.querySelector('#dv-in'), msg = box.querySelector('.dv-msg');
+  inp.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') go(); if (e.key === 'Escape') box.remove(); });
+  const go = async () => {
+    if (await tryDevCode(inp.value)) {
+      box.querySelector('.dv-card').innerHTML = `<div class="dv-ok">${badgeSVG('bd_dev', 120)}<h3>DEV MODE UNLOCKED</h3><p>Welcome back, developer. Your DEV badge, title and card are on. The rest of your dev stuff is in CUSTOMIZATION, and the DEV PANEL is on the home page.</p><button type="button" id="dv-x2">LET'S GO</button></div>`;
+      sounds.checkpoint?.(); sounds.pickup?.();
+      box.querySelector('#dv-x2').onclick = () => box.remove();
+    } else { msg.textContent = 'ACCESS DENIED'; sounds.denied?.(); inp.value = ''; box.querySelector('.dv-card').classList.remove('shake'); void box.offsetWidth; box.querySelector('.dv-card').classList.add('shake'); }
+  };
+  box.querySelector('#dv-go').onclick = go;
+  box.querySelector('#dv-x').onclick = () => box.remove();
+  box.onclick = (e) => { if (e.target === box) box.remove(); };
+  inp.focus();
+}
+function openDevPanel() {
+  if (!DEV.on || $('dev-box')) return;
+  const box = el('div'); box.id = 'dev-box';
+  const T = [['god', 'GOD MODE', 'You can\'t be hurt'], ['ammo', 'INFINITE AMMO', 'Never reload'], ['speed', 'SUPER SPEED', 'Move 60% faster'], ['grav', 'LOW GRAVITY', 'Jump to the moon'], ['ohk', 'ONE-HIT KILLS', 'Everything drops in one hit']];
+  box.innerHTML = `<div class="dv-card dv-panel"><div class="dv-head">${badgeSVG('bd_dev', 42)}<div><h3>DEV PANEL</h3><p>Offline only: none of this works in online matches.</p></div></div><div class="dv-tg"></div><div class="dv-acts"></div><div class="cw-btns"><button type="button" id="dv-x" class="alt">CLOSE</button></div></div>`;
+  document.body.append(box);
+  const draw = () => {
+    box.querySelector('.dv-tg').replaceChildren(...T.map(([k, n, d]) => { const b = el('button', `dv-t${devFlags[k] ? ' on' : ''}`); b.type = 'button'; b.innerHTML = `<b>${n}</b><small>${d}</small><i>${devFlags[k] ? 'ON' : 'OFF'}</i>`; b.onclick = () => { devFlags[k] = !devFlags[k]; try { localStorage.setItem('semifinals.devflags', JSON.stringify(devFlags)); } catch { /* ignore */ } sounds.click?.(1600, 0.2); draw(); }; return b; }));
+    const A = [['+1,000,000 CREDITS', () => { cosmetics.credits += 1000000; saveCosmetics(cosmetics); }], ['OWN EVERYTHING', () => { for (const id of Object.keys(ITEMS)) if (!ITEMS[id].dev && !owns(cosmetics, id)) cosmetics.owned.push(id); saveCosmetics(cosmetics); }],
+      ['MAX LEVEL', () => { gainXp(5e6, 'DEV'); }], ['LOCK DEV MODE', () => { try { localStorage.removeItem('semifinals.dev'); } catch { /* ignore */ } DEV.on = false; devSanitize(); saveCosmetics(cosmetics); refreshGuns(); box.remove(); }]];
+    box.querySelector('.dv-acts').replaceChildren(...A.map(([n, f]) => { const b = el('button', 'dv-a', n); b.type = 'button'; b.onclick = () => { f(); sounds.pickup?.(); renderMenu(); }; return b; }));
+  };
+  draw();
+  box.querySelector('#dv-x').onclick = () => box.remove();
+  box.onclick = (e) => { if (e.target === box) box.remove(); };
+}
+
 const CODES = { '929bcfd2deb79232881529b4be2b35043a07556e285c3a0c2586a92caa4b3804': 100000 };
 async function redeemCode(txt) {
   const code = String(txt || '').trim().toUpperCase().replace(/\s+/g, '');
@@ -969,7 +1147,7 @@ function killFeed(a, weaponName, b, head) {
 }
 
 function damagePlayer(amount, from, name) {
-  if (player.dead || player.invuln > 0 || cutscene) return;
+  if (player.dead || player.invuln > 0 || cutscene || devOn('god')) return;
   if (buffOn('fortify')) amount *= 0.5;
   player.hp -= amount;
   player.hurtT = 0;
@@ -1030,6 +1208,8 @@ const BODY_TYPE = { light: 'rusher', medium: 'rifle', heavy: 'heavy' };
 let deathDur = 3, takenBy = null, td = null, downedNear = null, tdShake = 0, victimCam = null, cineFov = 0, cineRoll = 0;
 const bodyPt = (b) => b.toWorld([0, 0.3, (b.fallSign || 1) * 1.0]);
 function myTakedownKind() {
+  const mel = weapon()?.def.melee ? weapon().def.id : null;      // holding a melee weapon: its own finisher
+  if (mel) return { knife: 'blade', katana: 'katana', hammer: 'sledge' }[mel];
   const list = takedownsFor(classLo.cls), k = classLo[classLo.cls].takedown;
   return list.includes(k) && !tdLocked(progress, k) ? k : list[0];
 }
@@ -1578,6 +1758,7 @@ const botHooks = {
   },
   // after the death fall: the body breaks apart
   onShatter: (bot) => {
+    if (!bot.zombie && bot.lastMineT != null && time - bot.lastMineT < 4 && deathFx(bot, myProfile().deathfx)) return;
     if (bot.lastByMelee && !bot.zombie) {
       // cut down: no brass, just a slash of light through the body, sparks and a puff of dust
       const c = bodyPt(bot), col = weapon()?.def.trail || [0.85, 0.92, 1], tc = bot.pal ? [...bot.pal.values()][0] : [0.9, 0.3, 0.2];
@@ -2410,6 +2591,19 @@ function itemCard(id, { onClick, on = false, priceTag = true }) {
   b.style.setProperty('--r', rgb(r.color));
   // a live 3D portrait of the item (falls back to a colour swatch if the thumbnail renderer isn't available)
   const cls = custCls || classLo.cls;
+  if (isProfileSlot(it.slot)) {
+    const pv = el('div', 'pvbox'); pv.innerHTML = previewHTML(id);
+    b.append(pv, el('b', null, it.name), el('small', null, r.name));
+    if (it.live) b.append(el('span', 'livetag react', 'ANIMATED'));
+    if (priceTag) {
+      if (owns(cosmetics, id)) b.append(el('span', `price own${it.dev ? ' dev' : ''}`, it.dev ? 'DEV' : it.price ? 'OWNED' : it.req ? 'EARNED' : 'FREE'));
+      else if (it.req) b.append(el('span', 'price lock', '🔒 EARN IT'));
+      else b.append(el('span', 'price', `◆ ${fmt(it.price)}`));
+    }
+    if (it.dev) b.classList.add('devit');
+    b.onclick = onClick;
+    return b;
+  }
   const img = el('img', 'sw3');
   img.alt = '';
   img.style.background = `radial-gradient(circle at 50% 40%, ${rgb(r.color.map((v) => v * 0.8))}, ${rgb(r.color.map((v) => v * 0.25))})`;
@@ -2455,7 +2649,7 @@ function renderCustom() {
     on: eq[custSlot] === it.id || tryOn === it.id,
     onClick: () => {
       if (owns(cosmetics, it.id)) {
-        eq[custSlot] = it.id; tryOn = null; saveCosmetics(cosmetics);
+        equipItem(cls, it.id); tryOn = null; saveCosmetics(cosmetics);
         if (custSlot === 'wskin') refreshGuns();
         sounds.cloth?.();
       } else { tryOn = it.id; sounds.click?.(2000, 0.15); }
@@ -2469,7 +2663,12 @@ function renderCustom() {
     const go = el('button', null, it.pass ? 'SEE THE BATTLE PASS ›' : 'GET IT IN THE SHOP ›');
     go.type = 'button';
     go.onclick = () => { const t = tryOn; showTab(it.pass ? 'pass' : 'shop'); tryOn = it.pass ? null : t; renderMenu(); };
+    if (it.req) { foot.replaceChildren(`${it.name}: earn it by doing this: ${ACH_TEXT[it.req]}.`); return; }
     foot.replaceChildren(it.pass ? `Previewing ${it.name}: battle pass tier ${pt?.[0]}${pt?.[1] === 'PREMIUM' ? ' (premium)' : ''}.` : `Previewing ${it.name} (not owned).`, go);
+  } else if (isProfileSlot(custSlot)) {
+    const tips = { spray: 'Press Y in a game to spray it on the wall in front of you.', deathfx: 'Plays when you finish someone off.', charm: 'Hangs off the side of every gun you hold.', pet: 'Hangs out next to you on the home screen.', badge: 'Shows next to your name on your player card, in the online lobby and over your head.', title: 'Shows under your name on your player card.', card: 'The background of your player card.' };
+    const pc = el('div', 'cu-pcard'); pc.innerHTML = myCardHTML();
+    foot.replaceChildren(pc, el('span', null, `${tips[custSlot] || ''} Profile items are the same on every class.`));
   } else foot.replaceChildren(`Equipped on ${CLASSES[cls].name}. Click an owned item to wear it, or a locked one to preview it.`);
 }
 function renderShop() {
@@ -2503,7 +2702,7 @@ function renderShop() {
     if (lockedLv) { sounds.denied?.(); return; }
     if (!own && !buy(cosmetics, tryOn)) { sounds.dry?.(); return; }
     if (!own) sounds.pickup?.();
-    cosmetics.equip[cls][it.slot] = tryOn;
+    equipItem(cls, tryOn);
     if (cls === classLo.cls) setHandLook(buildOutfit(cosmetics, cls));
     saveCosmetics(cosmetics);
     if (it.slot === 'wskin') refreshGuns();
@@ -2537,7 +2736,7 @@ const mmk = new Matchmaking({
 });
 // ONLINE: host or join a room for 1v1 / 2v2 with friends
 const lobby = new Lobby(world, {
-  root: $('net'), arenas: ARENAS.filter((a) => !a.hidden).map((a) => a.name), getClass: () => classLo.cls, getMe: () => ({ lv: levelOf(progress), look: myLook(), rk: ranked.rp, cr: crew ? { t: crew.tag, c: crew.col } : null }),
+  root: $('net'), arenas: ARENAS.filter((a) => !a.hidden).map((a) => a.name), getClass: () => classLo.cls, getMe: () => ({ lv: levelOf(progress), look: myLook(), rk: ranked.rp, cr: crew ? { t: crew.tag, c: crew.col } : null, pf: (() => { const P = myProfile(); return { b: P.badge, t: P.title, c: P.card }; })() }),
   onClose: () => { menu.classList.remove('hidden'); renderMenu(); },
   onStart: (info) => startOnline(info),
   onHostLeft: () => { banner('HOST LEFT', 'MATCH OVER', 'bad', 2); setTimeout(() => endMatch(true), 1600); },
@@ -2548,6 +2747,7 @@ const netHooks = {
   player,
   onShatter: (b) => botHooks.onShatter(b),
   remoteSkin: (p, tex, tier) => skinBurst(p, tex, tier, false),
+  remoteSpray: (m) => { if (ITEMS[m.k]?.slot === 'spray' && [m.p, m.n].every((v) => Array.isArray(v) && v.length === 3 && v.every(Number.isFinite))) addSpray(m.k, m.p, norm(m.n)); },
   buff: () => (buffT > 0 ? buffKind : ''),
   charge: () => { const w = weapon(); return w?.def.charge && !launcherW ? +(w.chargeT || 0).toFixed(2) : 0; },
   remoteShot: (f, e, r, k) => {
@@ -2672,6 +2872,15 @@ function startMode() {
   start();
 }
 $('mm-zombies').addEventListener('click', () => startMode('zombies'));
+{
+  let clicks = [];
+  document.querySelector('.mm-kicker')?.addEventListener('click', () => {
+    const now = performance.now();
+    clicks = [...clicks.filter((t) => now - t < 1500), now];
+    if (clicks.length >= 3) { clicks = []; openDevCode(); }
+  });
+}
+setTimeout(devCheck, 0);
 addEventListener('keydown', (e) => {
   if (!lobby.open || e.target?.tagName === 'INPUT') return;
   if (e.code === 'Escape') { lobby.hide(); menu.classList.remove('hidden'); renderMenu(); }
@@ -2756,6 +2965,7 @@ function showMatchEnd() {
   const el = $('matchend');
   const card = document.createElement('div');
   card.className = 'me-card';
+  card.insertAdjacentHTML('afterbegin', `<div class="me-pcard">${myCardHTML()}</div>`);
   const h = document.createElement('small'); h.textContent = `THE SEMI-FINALS · ${stadium.name}`;
   const t = document.createElement('b'); t.textContent = place < 1 ? 'YOU ADVANCE TO THE FINAL' : 'ELIMINATED';
   t.className = place < 1 ? 'win' : 'lose';
@@ -2804,6 +3014,7 @@ function showMatchEnd() {
 function showModeEnd() {
   const o = tdm.over;
   const card = el('div', 'me-card');
+  card.insertAdjacentHTML('afterbegin', `<div class="me-pcard">${myCardHTML()}</div>`);
   const win = o.rounds >= 10;
   card.append(el('small', null, `ZOMBIES · ${stadium.name}`), el('b', win ? 'win' : 'lose', `YOU LASTED ${o.rounds} ROUND${o.rounds === 1 ? '' : 'S'}`));
   if (!o.paid) {
@@ -3063,7 +3274,7 @@ function updateMatchHud(dt) {
     el.style.setProperty('--c', a.team.col);
     el.style.transform = `translate(${sp[0].toFixed(1)}px, ${sp[1].toFixed(1)}px)`;
     el.children[0].textContent = ally ? '▼' : '';
-    el.children[1].textContent = a.cr ? `[${a.cr.t}] ${a.name}` : a.name;
+    { const k = `${a.cr?.t || ''}|${a.name}|${a.pf?.b || ''}`; if (el._k !== k) { el._k = k; el.children[1].textContent = a.cr ? `[${a.cr.t}] ${a.name}` : a.name; if (a.pf?.b) el.children[1].insertAdjacentHTML('afterbegin', badgeSVG(a.pf.b, 14) + ' '); } }
     el.children[2].style.width = `${Math.round(clamp(a.hpFrac, 0, 1) * 100)}%`;
     el.style.display = '';
   }
@@ -3107,6 +3318,18 @@ function renderMenu() {
     const dv = divisionOf(ranked.rp);
     rd.title = `RANKED: ${dv.full} · ${ranked.rp} RP · ${ranked.won}/${ranked.played} ONLINE WINS. Click to set up your crew.`;
     rd.innerHTML = `${divHTML(ranked.rp)}<div><b>${dv.full}</b><small>${ranked.rp} RP${crew ? ` · ${crewHTML({ t: crew.tag, c: crew.col })}` : ' · NO CREW'}</small></div>`;
+  }
+  grantAchievements();
+  { // the player card on the home page (click it to change your badge / title / card), an emote button and the dev panel
+    let pc = $('mm-pcard');
+    if (!pc) {
+      pc = el('div', 'mm-pcard'); pc.id = 'mm-pcard';
+      $('mm-daily').before(pc);
+    }
+    pc.innerHTML = myCardHTML(`<div class="pc-btns"><button type="button" data-a="edit">EDIT CARD</button><button type="button" data-a="emote">▶ EMOTE</button>${DEV.on ? '<button type="button" data-a="dev" class="pc-dev">&lt;/&gt; DEV PANEL</button>' : ''}</div>`);
+    pc.querySelector('[data-a=edit]').onclick = () => { custSlot = 'badge'; tryOn = null; showTab('custom'); };
+    pc.querySelector('[data-a=emote]').onclick = () => { playEmote(); };
+    pc.querySelector('[data-a=dev]')?.addEventListener('click', openDevPanel);
   }
   if (menuTab === 'custom') renderCustom();
   if (menuTab === 'shop') renderShop();
@@ -3220,6 +3443,12 @@ function renderMenu() {
 // ---------- showroom (the 3D scene behind the main menu) ----------
 let showroomChar = null, showroomKey = '', showroomCls = 'medium', resultPose = '';
 const skinClassShown = () => showroomCls;
+let emoteUntil = 0;
+function playEmote() {
+  emoteUntil = performance.now() + 7000;
+  showroomKey = ''; setShowroomClass();
+  sounds.pickup?.();
+}
 function setShowroomClass() {
   const dressing = menuTab === 'custom' || menuTab === 'shop';
   const cls = dressing ? (custCls || classLo.cls) : classLo.cls;
@@ -3234,7 +3463,7 @@ function setShowroomClass() {
   showroomChar.t = keepT;
   // a victory pose on the results screen (or the slump if you lost), and when browsing poses in Customization
   const emote = showroomChar.skin.emote || 'victoryPump';
-  showroomChar.pose = resultPose ? (resultPose === 'win' ? emote : 'defeat') : dressing && (custSlot === 'emote' || ITEMS[tryOn]?.slot === 'emote') ? emote : 'lobby';
+  showroomChar.pose = resultPose ? (resultPose === 'win' ? emote : 'defeat') : emoteUntil > performance.now() || (dressing && (custSlot === 'emote' || ITEMS[tryOn]?.slot === 'emote')) ? emote : 'lobby';
   showroomChar.realGun = true;
   skinClass = cls;
   showroomChar.gunDef = skinDef(buildDef(WEAPONS[sel.weapon], loadouts[sel.weapon] || {}), gunSkinFor(cosmetics, cls, tryOn));
@@ -3267,6 +3496,7 @@ function drawShowroom(aspect) {
   const sp = map.showroom.spot;
   compose(studioFloorM, [sp[0], sp[1] - 0.05, sp[2]], [0, 0, 0], [80, 0.1, 80]);
   renderer.draw(studioFloorM, [80, 0.1, 80], rc.map((v) => v * 0.62), 0, 0, 0, 1, undefined, 'poly');
+  if (emoteUntil && performance.now() > emoteUntil) { emoteUntil = 0; showroomKey = ''; setShowroomClass(); }
   if (showroomChar) {
     showroomChar.t = time;
     // soft contact shadow under the feet
@@ -3278,6 +3508,7 @@ function drawShowroom(aspect) {
     renderer.setBlend(false);
     renderer.setRim(rc.map((v) => v * 0.55));
     for (const p of showroomChar.parts()) renderer.drawPart(p);
+    { const pet = myProfile().pet, sp = map.showroom.spot; if (pet && pet !== 'pet_none') for (const p of petParts(pet, [sp[0] - 0.62, sp[1], sp[2] - 0.25], 0.5, time)) renderer.drawPart(p); }
     if (showroomChar.hasGun !== false) for (const p of Weapon.worldParts(showroomChar.gunDef, showroomChar.gunMatrix)) renderer.drawPart(p);
     renderer.setRim(null);
   }
@@ -3490,7 +3721,7 @@ function worldBeams(w) {
   const g = player.grapple;
   if (!bench.open && (g || reel)) {
     const hm = w.handModels[0];
-    const hand = vmToWorld([hm[12], hm[13], hm[14]]);
+    const hand = vmToWorld(w.grapMuzzle || [hm[12], hm[13], hm[14]]);     // out of the grapple gun's muzzle
     let tip, sag = 0, wave = 0, open = 0, spin = time * 26;
     if (g && g.phase === 'fire') {
       // the hook flies out spinning, the line snaking after it
@@ -3678,6 +3909,7 @@ function frameBody(now) {
     if (input.hit('Digit2')) switchTo(1);
     if (input.hit('Digit3')) switchTo(2);
     // quick melee: X swaps to your melee weapon and swings it straight away
+    if (input.hit('KeyY') && !player.dead && !td) spray();
     if (input.hit('KeyX') && !course.active && !player.dead && slots[2] && !(meleeT && !meleeT.done)) { if (current !== 2) switchTo(2); const w = weapon(); w.equipT = 1; w.sinceShot = 0; quickMelee = true; fire(w); }
     nearCase = findCase();
     updateRacks(dt);
@@ -3719,7 +3951,10 @@ function frameBody(now) {
     for (const l of lifts) l.update(dt, player, sounds);
     if (inStadium()) for (const c of stadium.cargo || []) c.update(dt, player);
     // heavier guns slow you down; a spinning minigun slows you a lot more
-    player.speedMul = CLASSES[classLo.cls].speed * (w.def.moveMul ?? 1) * (w.def.spin && (w.spinT || 0) > 0.05 ? 0.72 : 1) * (buffOn('stim') ? 1.3 : buffOn('fortify') ? 0.8 : 1);
+    player.gravMul = devOn('grav') ? 0.35 : 1;
+    if (devOn('ammo')) for (const sw of slots) if (!sw.def.melee) { sw.ammo = sw.def.mag; if (sw.reserve != null) sw.reserve = Math.max(sw.reserve, sw.def.mag * 3); }
+    updateSprays(dt);
+    player.speedMul = (devOn('speed') ? 1.6 : 1) * CLASSES[classLo.cls].speed * (w.def.moveMul ?? 1) * (w.def.spin && (w.spinT || 0) > 0.05 ? 0.72 : 1) * (buffOn('stim') ? 1.3 : buffOn('fortify') ? 0.8 : 1);
     player.killY = inStadium() ? stadium.voidY - 20 : -30;     // (the zombies bunker is deep underground)
     player.update(dt, input, { ads: w.ads, firing: input.fireDown && w.ammo > 0 && !w.reloading && !player.trav, act });
     if (playerTether) {
@@ -3796,9 +4031,11 @@ function frameBody(now) {
   perspective(vmProjM, 58 * Math.PI / 180, aspect, 0.01, 10);
   lookDir(vmViewM, [0, 0, 0], [0, 0, -1], [0, 1, 0], player.roll * 0.5);
   worldVfov = vfov; worldAspect = aspect;
+  w.charm = myProfile().charm; w.charmT = time;
   const vmParts = bench.open || cutscene || player.dead || td ? [] : w.viewmodel(player, time);
   const kcUndo = killcam ? killcamPose() : null;
   const botParts = tdm.active && inStadium() ? [...botMgr.drawParts(), ...tdm.drawParts(modeDraw)] : botMgr.drawParts();
+  sprayParts(botParts);
   if (kcUndo) { botParts.push(...killcam.body.parts()); kcUndo(); }
   if ((td && !player.dead) || victimCam) takedownParts(botParts);
   agentTakedownParts(botParts);
@@ -3928,4 +4165,4 @@ function frameBody(now) {
 requestAnimationFrame(frame);
 
 // handy for debugging from the console / automated tests
- window.game = { kf: (...a) => killFeed(...a), daily, gainXp: (n, l) => gainXp(n, l), progress, skinLive: (h, s) => { skinHeat = h; skinStreak = s; }, startTakedown, updateTakedown, findDowned, takedownParts, get td() { return td; }, get deathT() { return deathT; }, useRack, skinKill, ranked, get crew() { return crew; }, openCrew, startMode, zombies, ZMAP, zFillAmmo, modeUse: () => modeThing, modeUseNow: () => modeUse(), fireNow: () => { updateCamera(); fire(weapon()); }, pass, passXp, buyPremium, meleeTargets: (r, a, m) => { updateCamera(); return meleeTargets(r, a, m).map((t) => ({ dist: t.dist })); }, camFwd: () => camFwd, redeemCode, useBuff, get buff() { return { kind: buffKind, t: buffT }; }, setThrow: (k) => { equippedThrow = k; throwCharges = 2; }, useThrowable, get throwCharges() { return throwCharges; }, get flashT() { return flashT; }, heavy, useHeavy, applyClass, useGadget, useTether, useCloak, get cloakT() { return cloakT; }, get launcherW() { return launcherW; }, gadgets, get burning() { return burning; }, lobby, online, get tdm() { return tdm; }, batches, renderer, map, ARENAS, get stadium() { return stadium; }, setArena: (i) => { stadium = ARENAS[i]; }, lifts, hooks: botHooks, updateFall, hookTarget, fallTop: () => fallTop, breakGlass, updateCombat, startMatch: (m) => startMatch(m), enterStadium, where: () => where, sr: () => showroomChar, cosmetics, refreshGuns, classLo, renderMenu, showTab, enterRange, cs: () => cutscene, botMgr, elevator, damagePlayer, pressConsole, setTimeScale: (v) => { timeScale = v; }, bench, openBench, closeBench, loadouts, applyLoadout, course, player, slots, weapon, world, stats, effects, dummies, walls, cases, input, start, setPlaying, resetRange, switchTo, pickUp, WEAPONS };
+ window.game = { tryDevCode, openDevCode, openDevPanel, get devFlags() { return devFlags; }, DEV, myProfile, equipItem, spray, sprays, deathFx, playEmote, kf: (...a) => killFeed(...a), daily, gainXp: (n, l) => gainXp(n, l), progress, skinLive: (h, s) => { skinHeat = h; skinStreak = s; }, startTakedown, updateTakedown, findDowned, takedownParts, get td() { return td; }, get deathT() { return deathT; }, useRack, skinKill, ranked, get crew() { return crew; }, openCrew, startMode, zombies, ZMAP, zFillAmmo, modeUse: () => modeThing, modeUseNow: () => modeUse(), fireNow: () => { updateCamera(); fire(weapon()); }, pass, passXp, buyPremium, meleeTargets: (r, a, m) => { updateCamera(); return meleeTargets(r, a, m).map((t) => ({ dist: t.dist })); }, camFwd: () => camFwd, redeemCode, useBuff, get buff() { return { kind: buffKind, t: buffT }; }, setThrow: (k) => { equippedThrow = k; throwCharges = 2; }, useThrowable, get throwCharges() { return throwCharges; }, get flashT() { return flashT; }, heavy, useHeavy, applyClass, useGadget, useTether, useCloak, get cloakT() { return cloakT; }, get launcherW() { return launcherW; }, gadgets, get burning() { return burning; }, lobby, online, get tdm() { return tdm; }, batches, renderer, map, ARENAS, get stadium() { return stadium; }, setArena: (i) => { stadium = ARENAS[i]; }, lifts, hooks: botHooks, updateFall, hookTarget, fallTop: () => fallTop, breakGlass, updateCombat, startMatch: (m) => startMatch(m), enterStadium, where: () => where, sr: () => showroomChar, cosmetics, refreshGuns, classLo, renderMenu, showTab, enterRange, cs: () => cutscene, botMgr, elevator, damagePlayer, pressConsole, setTimeScale: (v) => { timeScale = v; }, bench, openBench, closeBench, loadouts, applyLoadout, course, player, slots, weapon, world, stats, effects, dummies, walls, cases, input, start, setPlaying, resetRange, switchTo, pickUp, WEAPONS };

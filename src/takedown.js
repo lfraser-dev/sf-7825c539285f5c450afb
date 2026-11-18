@@ -100,6 +100,17 @@ const ANIMS = {
     R: [[0, [0.15, 1.0, -0.3]], [0.5, [0.12, 1.8, 0.25]], [0.9, [0.1, 1.7, 0.4]], [1.3, [0.05, 0.75, -0.6]], [1.6, [0.05, 0.75, -0.6]], [1.9, [0.15, 1.0, -0.3]]],
     prop: 'hammer',
   },
+  katana: {
+    // the katana finisher (build 0.73): drawn up over the right shoulder, a cut down across them, a step through and a
+    // second cut back the other way
+    trail: 'tip',
+    off: [[0, [0, 0, 0]], [0.35, [0, 0, -0.2]], [0.95, [0, 0, -0.35]], [1.3, [0, 0, -0.55]], [1.9, [0, 0, -0.55]], [2.1, [0, 0, -0.3]]],
+    rot: [[0, 0], [0.5, -0.1], [0.95, 0.45], [1.15, 0.2], [1.45, 0.5], [1.9, 0.1], [2.1, 0]],
+    crouch: [[0, 0], [0.5, 0.05], [0.95, 0.4], [1.15, 0.2], [1.45, 0.42], [2.1, 0]],
+    L: [[0, [0.05, 1.0, -0.25]], [0.5, [0.32, 1.55, 0.02]], [0.95, [-0.22, 0.8, -0.45]], [1.15, [-0.3, 1.2, -0.25]], [1.45, [0.28, 0.82, -0.45]], [1.9, [0.1, 1.0, -0.3]], [2.1, [0.05, 1.0, -0.25]]],
+    R: [[0, [0.12, 1.08, -0.3]], [0.5, [0.4, 1.68, 0.06]], [0.95, [-0.14, 0.9, -0.55]], [1.15, [-0.35, 1.32, -0.3]], [1.45, [0.36, 0.92, -0.55]], [1.9, [0.18, 1.08, -0.38]], [2.1, [0.12, 1.08, -0.3]]],
+    prop: 'katana',
+  },
   bodyslam: {
     spin: true, trail: 'hand',
     off: [[0, [0, 0, 0]], [0.3, [0, 0, 0]], [0.75, [0, 1.5, -0.6]], [1.1, [0, -0.6, -0.9]], [1.35, [0, 0.3, -0.6]], [1.6, [0, 0, -0.3]], [1.8, [0, 0, -0.3]]],
@@ -123,7 +134,7 @@ const FLOURISHES = {
   none: { L: [-0.22, 1.08, -0.18], R: [0.3, 1.78, -0.08], wave: [0.0, 0.05, 11] },        // fist pump
   flex: { L: [-0.42, 1.62, 0.0], R: [0.42, 1.62, 0.0], wave: [0.0, 0.03, 10] },           // both arms up
 };
-const FLOURISH_OF = { blade: 'knife', sledge: 'hammer', buttstroke: 'rifle', shockpalm: 'orb', pocketnade: 'nade', stomp: 'flex', bodyslam: 'flex' };
+const FLOURISH_OF = { katana: 'knife', blade: 'knife', sledge: 'hammer', buttstroke: 'rifle', shockpalm: 'orb', pocketnade: 'nade', stomp: 'flex', bodyslam: 'flex' };
 for (const a of Object.values(ANIMS)) a.end = a.off[a.off.length - 1][0];
 
 // the pose for a takedown at time t (seconds)
@@ -236,6 +247,18 @@ export function takedownProps(out, bot, kind, t, def, bodyPt, accent = [1, 0.68,
       for (const k of [-1, 1]) bd.rbox(along(end, B.B, k * 0.2), HB, [0.04, 0.19, 0.19], 0.02, steel, 0.15);
       bd.rbox(end, HB, [0.12, 0.18, 0.18], 0.01, accent, 0.2);
       tip = along(end, B.B, -0.22);
+      break;
+    }
+    case 'katana': {
+      // a katana in both hands: wrapped hilt between the fists, a round guard, a long bright blade past the top hand
+      const d = nrm([hR[0] - hL[0], hR[1] - hL[1] + 0.06, hR[2] - hL[2]]);
+      const B = basisFrom(d, side);
+      bd.capsule(along(hL, d, -0.06), along(hR, d, 0.04), 0.022, 0.022, [0.08, 0.06, 0.06], 0);
+      bd.capsule(along(hL, d, -0.02), along(hR, d, 0.0), 0.024, 0.024, [0.75, 0.12, 0.1], 0);
+      bd.rbox(along(hR, d, 0.06), B, [0.1, 0.012, 0.1], 0.02, [0.7, 0.55, 0.2], 0.1);
+      bd.rbox(along(hR, d, 0.47), B, [0.012, 0.8, 0.045], 0.004, steel, 0.25);
+      bd.rbox(along(along(hR, d, 0.47), B.B, -0.02), B, [0.008, 0.78, 0.01], 0.002, [0.96, 0.98, 1], 0.7);
+      tip = along(hR, d, 0.86);
       break;
     }
     default:

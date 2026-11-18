@@ -1,6 +1,7 @@
 // A held weapon: firing, recoil, spread, reloads (mag / shell-by-shell), pump & bolt
 // cycling, equip animation, and the first-person viewmodel with hands.
 import { compose, mul, mat4, damp, clamp, lerp, anglesFor, spring } from './math.js';
+import { charmParts } from './profile.js';
 
 const GLOVE = [0.3, 0.29, 0.27];
 const SLEEVE = [0.22, 0.24, 0.25];
@@ -148,6 +149,9 @@ export class Weapon {
     this.queued = 0;
     this.events = [];
     this.root = mat4();
+    this.rootL = mat4();      // akimbo: the second gun, in your left hand
+    this.akKick = [0, 0];     // akimbo: each gun kicks on its own (left, right)
+    this.akSide = 0;          // akimbo: which gun fired last (1 = left)
     this.tmp = mat4();
     this.magFrame = mat4();
     this.parts = def.parts.map((p) => ({ ...p, shape: partShape(p), model: mat4(), local: mat4() }));
@@ -173,7 +177,7 @@ export class Weapon {
   // laser emitter position in view space (after viewmodel() ran this frame), or null
   laserPoint() { return this.def.laser ? transformPoint(this.root, this.def.laser) : null; }
   // any gun-local point in view space (uses the pose from the last viewmodel() call)
-  gunPoint(p) { return transformPoint(this.root, p); }
+  gunPoint(p) { return transformPoint(this.def.akimbo && this.akSide ? this.rootL : this.root, p); }
 
   get ads() { return this.adsT > 0.5; }
   get reloading() { return !!this.reload; }
@@ -205,7 +209,7 @@ export class Weapon {
     if (eq0 < 1) this.drawEvents(eq0, this.equipT, ctx);
 
     const tr = player.trav;
-    const wantAds = input.aiming && !player.sprinting && !this.reload && this.equipT > 0.5 && !tr;
+    const wantAds = !d.akimbo && input.aiming && !player.sprinting && !this.reload && this.equipT > 0.5 && !tr;
     const climb = tr?.kind === 'mantle' || tr?.kind === 'hang' || player.press != null;
     this.mantleT += ((climb ? 1 : 0) - this.mantleT) * damp(tr ? 18 : 9, dt);
     const wr = player.wallRun;
@@ -274,6 +278,7 @@ export class Weapon {
     this.bloom -= this.bloom * damp(6, dt);
     this.flash -= dt;
     this.vmKick -= this.vmKick * damp(16, dt);
+    for (let k = 0; k < 2; k++) this.akKick[k] -= this.akKick[k] * damp(14, dt);
     this.vmRollKick = (this.vmRollKick || 0) * Math.exp(-14 * dt);
     this.boltKick -= this.boltKick * damp(28, dt);
     // springy sway from mouse look
@@ -308,6 +313,7 @@ export class Weapon {
     if (!d.melee) this.ammo--;
     this.sinceShot = 0;
     this.chargeT = 0;
+    if (d.akimbo) { this.akSide = 1 - this.akSide; this.akKick[this.akSide ? 0 : 1] = 1; }     // left, right, left, right
     ctx.fire(this);
     const am = lerp(1, 0.55, this.adsT);
     // shooting mid-slide: no stable stance, so two-handed guns kick a lot harder
@@ -596,6 +602,12 @@ export class Weapon {
         reach(0.6, 0.72, [-0.08, -0.05, 0.02]);
         const clip = k(0.68, 0.7, 0.71, 0.78); bump = Math.max(bump, clip);
         spinExtra = seg(p, 0.74, 0.95) * Math.PI * 6;
+      } else if (anim === 'akimbo') {
+        // both guns tipped up, empties dropped out, dipped low out of sight, back up loaded, a spin to finish
+        const up = k(0, 0.1, 0.22, 0.3), dip = k(0.28, 0.4, 0.62, 0.78);
+        this.akDip = [up, dip];
+        magVisible = p < 0.24 || p > 0.6; magOff = [0, -0.06 * seg(p, 0.12, 0.24), 0];
+        spinExtra = 0; settleEnd(0.78, 0.08);
       }
     } else if (r && !r.shell) {
       const p = r.t / r.total;
@@ -847,6 +859,14 @@ export class Weapon {
       pos[0] += (Math.random() - 0.5) * j; pos[1] += (Math.random() - 0.5) * j; pos[2] += ch * 0.025;
       rot[2] += (Math.random() - 0.5) * ch * ch * 0.02; rot[0] -= ch * 0.015;
     }
+    if (d.akimbo) {
+      const [up, dip] = r && !r.shell ? this.akDip || [0, 0] : [0, 0];
+      pos[1] -= 0.32 * dip; rot[0] += 0.5 * up - 0.7 * dip;
+      // two guns: the right one where a single gun would be, the left mirrored across; each kicks back on its own
+      const kL = this.akKick[0], kR = this.akKick[1];
+      compose(this.rootL, [-pos[0] + 0.01, pos[1] + kL * 0.012, pos[2] + kL * 0.045], [rot[0] + kL * 0.16, -rot[1], -rot[2] - kL * 0.04], [1, 1, 1]);
+      pos[1] += kR * 0.012; pos[2] += kR * 0.045; rot[0] += kR * 0.16; rot[2] += kR * 0.04;
+    }
     compose(this.root, pos, rot, [1, 1, 1]);
 
     const out = [];
@@ -932,6 +952,41 @@ export class Weapon {
       out.push({ model: m, scale: s, color: d.shellCol || RED, emissive: 0.3, shape: 'cyl' });
     }
 
+    if (this.charm && this.charm !== 'ch_none' && !d.melee) {
+      // the weapon charm: clipped to the left side near the back, swinging on its little chain as you move and shoot
+      if (!this.charmAt || this.charmDef !== d) {
+        this.charmDef = d;
+        const vis = d.parts.filter((q) => !q.hidden && !q.mag && Math.abs(q.c[2] - (this.zBack * 0.7 + this.zFront * 0.3)) < 0.12);
+        const xm = Math.min(...vis.map((q) => q.c[0] - q.s[0] / 2), -0.012);
+        const yc = vis.length ? vis.reduce((a, q) => a + q.c[1], 0) / vis.length : 0;
+        this.charmAt = [xm - 0.003, yc - 0.01, this.zBack * 0.7 + this.zFront * 0.3];
+        this.chA = [0, 0]; this.chV = [0, 0]; this.chLast = time;
+      }
+      const cdt = Math.min(0.05, Math.max(0, time - (this.chLast ?? time))); this.chLast = time;
+      const push = [(this.sway?.[1] || 0) * 6 - this.vmKick * 8 + (player.vel ? player.vel[1] * 0.01 : 0), -(this.sway?.[0] || 0) * 8 + (this.lag?.[0] || 0) * 10];
+      for (let k = 0; k < 2; k++) [this.chA[k], this.chV[k]] = spring(this.chA[k], this.chV[k], clamp(push[k], -0.9, 0.9), 60, 3, cdt);
+      const CM = this.charmM || (this.charmM = mat4()), pool = this.charmPool || (this.charmPool = []);
+      compose(this.tmp, this.charmAt, [this.chA[0], 0, this.chA[1]], [1, 1, 1]);
+      mul(CM, this.root, this.tmp);
+      let n = 0;
+      for (const q of charmParts(this.charm, time)) {
+        const m = pool[n] || (pool[n] = mat4()), L0 = pool[n + 40] || (pool[n + 40] = mat4()); n++;
+        compose(L0, q.c, [q.rx || 0, q.ry || 0, q.rz || 0], q.s);
+        mul(m, CM, L0);
+        out.push({ model: m, scale: q.s, color: q.col, emissive: q.em || 0, shape: q.shape ?? partShape(q), mat: q.m, edges: 0 });
+      }
+    }
+    if (d.akimbo) {
+      // the left gun: the same parts again on the left-hand frame
+      const pool = this.akPool || (this.akPool = []), toL = this.akToL || (this.akToL = mat4());
+      let n = 0;
+      for (const p of this.parts) {
+        if (p.hidden) continue;
+        const m = pool[n] || (pool[n] = mat4()); n++;
+        mul(m, this.rootL, p.local);
+        out.push({ model: m, scale: p.s, color: p.col, emissive: p.em || 0, shape: p.shape, mat: p.m, tex: p.em ? 0 : p.tex || GUN_TEX, edges: 0 });
+      }
+    }
     // --- hands & arms ---
     // Proper hands: a palm with jointed fingers and a thumb. The grip hand wraps the pistol grip with the index finger
     // on the trigger; the support hand cups the handguard with its fingers curled up the far side. Gloves, bare skin
@@ -1046,6 +1101,7 @@ export class Weapon {
       const GRIP = { f: [d.melee ? [1.4, 1.35, 0.85, 0.03] : [0.2, 0.45, 0.35, 0.05], [1.45, 1.35, 0.85], [1.5, 1.4, 0.85], [1.5, 1.38, 0.8, -0.05]],
         t: [[0.3, -0.85, 0.45], [0.05, -0.55, 0.85], [0, -0.3, 0.95]] };
       RH = drawHand(this.root, ax, ay, az, o, 1, GRIP);
+      if (d.akimbo) this.akLH = drawHand(this.rootL, ax, ay, az, add3(right, rotX([-(gw + 0.013), -0.004, 0.024], gRx)), -1, GRIP);
       compose(this.tmp, o, [0, 0, 0], [1, 1, 1]);
       mul(hm[1], this.root, this.tmp);
     }
@@ -1059,7 +1115,38 @@ export class Weapon {
       t: [[0.25, -0.8, 0.55], [0.3, -0.6, 0.75], [0.25, -0.35, 0.9]] };
     const FLAT = { f: [[0.12, 0.1, 0.06, 0.12], [0.1, 0.1, 0.06, 0.03], [0.1, 0.1, 0.06, -0.06], [0.12, 0.1, 0.06, -0.15]],
       t: [[0.8, -0.3, 0.5], [0.5, -0.1, 0.85], [0.3, 0, 0.95]] };
-    if (d.melee && d.melee.style !== 'smash' && !(plant && plant.t > 0.5)) {
+    this.grapMuzzle = null;
+    if (plant?.grapple) {
+      // the GRAPPLE GUN in the left hand: comes up from below as it's fired, the line runs out of its muzzle
+      const G = this.grapM || (this.grapM = mat4()), I0 = this.identity || (this.identity = mat4());
+      const rise = 1 - plant.t;
+      compose(G, [plant.pos[0] - rise * 0.05, plant.pos[1] - rise * 0.32, plant.pos[2] + rise * 0.1], [plant.rot[0] - rise * 0.6, plant.rot[1], plant.rot[2]], [1, 1, 1]);
+      const pool = this.grapPool || (this.grapPool = []);
+      let n = 0;
+      const gp = (c, sz, col, o = {}) => {
+        const m = pool[n] || (pool[n] = mat4()); n++;
+        compose(this.tmp, c, [o.rx || 0, o.ry || 0, o.rz || 0], sz);
+        mul(m, G, this.tmp);
+        out.push({ model: m, scale: sz, color: col, emissive: o.em || 0, shape: o.shape, mat: o.mat, edges: 0 });
+      };
+      const GM = [0.16, 0.17, 0.19], OR = [1, 0.45, 0.08];
+      gp([0, 0.02, -0.06], [0.044, 0.058, 0.2], GM, { mat: 'metal', shape: 0.008 });
+      gp([0, 0.052, -0.07], [0.03, 0.01, 0.16], [0.1, 0.1, 0.11], { mat: 'metal' });
+      gp([0.0225, 0.02, -0.06], [0.002, 0.012, 0.14], OR, { em: 0.5 });
+      gp([0, 0.032, -0.2], [0.032, 0.032, 0.11], [0.3, 0.31, 0.34], { shape: 'cyl', mat: 'steel' });
+      gp([0, 0.032, -0.255], [0.04, 0.04, 0.012], OR, { shape: 'cyl', mat: 'paint' });
+      gp([0, -0.012, -0.1], [0.07, 0.042, 0.042], [0.25, 0.25, 0.27], { shape: 'cyl', ry: Math.PI / 2, mat: 'metal' });
+      gp([0, -0.012, -0.1], [0.05, 0.046, 0.046], OR, { shape: 'cyl', ry: Math.PI / 2, mat: 'cloth' });
+      gp([0, -0.055, 0.025], [0.034, 0.1, 0.042], [0.08, 0.08, 0.09], { rx: -0.3, mat: 'rubber', shape: 0.008 });
+      gp([0, -0.025, -0.02], [0.006, 0.03, 0.02], [0.08, 0.08, 0.09], { rx: 0.4 });
+      gp([0, 0.08, -0.04], [0.006, 0.016, 0.006], [0.2, 1, 0.4], { em: 1 });
+      this.grapMuzzle = transformPoint(G, [0, 0.032, -0.27]);
+      const gaz = norm3(rotX([0, 0.12, -1], -0.3)), gay = [1, 0, 0], gax = cross3(gay, gaz);
+      const GRIPL = { f: [[1.0, 0.9, 0.6, 0.05], [1.45, 1.35, 0.85], [1.5, 1.4, 0.85], [1.5, 1.38, 0.8, -0.05]], t: [[0.3, -0.85, 0.45], [0.05, -0.55, 0.85], [0, -0.3, 0.95]] };
+      LH = drawHand(G, gax, gay, gaz, add3([0, -0.05, 0.03], rotX([-(0.017 + 0.013), -0.004, 0.024], -0.3)), -1, GRIPL);
+    } else if (d.akimbo) {
+      LH = this.akLH;       // holding the other gun
+    } else if (d.melee && d.melee.style !== 'smash' && !(plant && plant.t > 0.5)) {
       // a knife or a sword is held in one hand: the other one stays down out of sight
       LH = null;
     } else if (d.melee && !(plant && plant.t > 0.5)) {
@@ -1148,7 +1235,7 @@ export class Weapon {
     if (this.flash > 0 && fs > 0) {
       const f = hm[4], s = [0.09 * fs, 0.09 * fs, 0.12 * fs];
       compose(this.tmp, add3(d.muzzle, [0, 0, -0.06]), [0, 0, Math.random() * Math.PI], s);
-      mul(f, this.root, this.tmp);
+      mul(f, d.akimbo && this.akSide ? this.rootL : this.root, this.tmp);
       out.push({ model: f, scale: s, color: FLASH, emissive: 1, shape: 'sphere' });
     }
     return out;
@@ -1163,11 +1250,12 @@ export class Weapon {
       const reach = seg(p, 0, 0.35), push = seg(p, 0.38, 0.5) * (1 - seg(p, 0.55, 0.7)), back = seg(p, 0.7, 1);
       return { t: reach * (1 - back), pos: [-0.08, -0.12 - push * 0.03, -0.46 - push * 0.1], rot: [-0.6, 0.1, 1.3] };
     }
-    if (!tr && player.grapple && player.grapple.phase !== 'miss') {
-      // grapple: free hand thrust out toward the hook
+    if (!tr && player.grapple) {
+      // grapple: the free hand brings up the grapple gun and fires it at the hook point
       const g = player.grapple;
-      const t = smooth(clamp((g.phase === 'fire' ? g.t : 1) / 0.08, 0, 1));
-      return { t, pos: [-0.17, -0.1, -0.62], rot: [-0.1, 0.1, 0.3] };
+      const t = smooth(clamp((g.phase === 'pull' ? 1 : g.t) / 0.07, 0, 1));
+      const kick = g.phase === 'fire' || g.phase === 'miss' ? Math.exp(-g.t * 14) : 0;
+      return { t, pos: [-0.17, -0.095 + kick * 0.015, -0.44 + kick * 0.05], rot: [0.04 + kick * 0.25, 0.06, -0.08], grapple: true };
     }
     if (!tr && player.sliding && this.def.oneHanded && this.slideT > 0.05 && !this.reload) {
       const t = smooth(clamp(this.slideT * (1 - this.adsT), 0, 1));

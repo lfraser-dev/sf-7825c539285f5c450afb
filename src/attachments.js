@@ -331,6 +331,7 @@ function surfaces(def) {
 
 // ---------------------------------------------------------------- build
 export function buildDef(base, loadout = {}) {
+  if (base.akimbo) return { ...base, parts: base.parts.map((p) => ({ ...p, c: [...p.c], s: [...p.s] })), spread: { ...base.spread }, recoil: { ...base.recoil }, flashScale: 1, hipSpread: 1, loadout: {} };   // akimbo: no attachments
   if (base.melee) return { ...base, parts: base.parts.map((p) => ({ ...p })), range: base.melee.range, flashScale: 0, hipSpread: 1, loadout: {} };   // melee: no attachments
   const id = base.id, style = styleOf(id), m = MOUNT[id] || MOUNT[style];
   const def = {
@@ -342,7 +343,7 @@ export function buildDef(base, loadout = {}) {
     magPos: [...base.magPos],
     foreGrip: [...base.foreGrip],
     parts: base.parts.map((p) => ({ ...p, c: [...p.c], s: [...p.s] })),
-    range: RANGE[id] ?? RANGE[style],
+    range: RANGE[id] ?? RANGE[style] ?? base.range,
     flashScale: 1,
     hipSpread: 1,
     laser: base.laser ?? null,

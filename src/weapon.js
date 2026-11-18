@@ -76,8 +76,8 @@ export function meleePose(M, T, n, equipT = 1) {
     }
   } else {                  // the hammer: hauled up overhead, then down with everything you've got (it bounces off)
     const side = alt * 0.06;
-    add(wind, [side, 0.14, 0.02], [0.75, alt * 0.15, alt * 0.2]);
-    add(hit, [-side - 0.04, -0.2, -0.24], [-1.55, -alt * 0.1 - 0.1, -alt * 0.15 - 0.15]);
+    add(wind, [side + 0.04, 0.08, -0.05], [0.45, alt * 0.12 + 0.1, alt * 0.15 + 0.15]);
+    add(hit, [-side - 0.06, -0.12, -0.2], [-0.8, -alt * 0.1 - 0.12, -alt * 0.15 - 0.18]);
     add(over, [0, 0.07, 0], [0.5, 0, 0]);
   }
   add(settle, [0, 0.4, 0], [1, 0, 0.6]);
@@ -1062,6 +1062,13 @@ export class Weapon {
     if (d.melee && d.melee.style !== 'smash' && !(plant && plant.t > 0.5)) {
       // a knife or a sword is held in one hand: the other one stays down out of sight
       LH = null;
+    } else if (d.melee && !(plant && plant.t > 0.5)) {
+      // the sledgehammer: the other hand closes round the shaft higher up, the same way the grip hand does
+      const az = norm3(rotX([0, 0.12, -1], gRx)), ay = [1, 0, 0], ax = cross3(ay, az);
+      const o = add3(d.foreGrip, rotX([-(gw + 0.013), -0.004, 0.024], gRx));
+      const FIST = { f: [[1.4, 1.35, 0.85, 0.03], [1.45, 1.35, 0.85], [1.5, 1.4, 0.85], [1.5, 1.38, 0.8, -0.05]],
+        t: [[0.3, -0.85, 0.45], [0.05, -0.55, 0.85], [0, -0.3, 0.95]] };
+      LH = drawHand(this.root, ax, ay, az, o, -1, FIST);
     } else if (plant && plant.t > 0.5) {
       // flat hand planted on a ledge / wall / button
       const onGunP = transformPoint(this.root, left);

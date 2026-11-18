@@ -22,7 +22,8 @@ import { Course, fmtTime } from './course.js';
 import { Elevator } from './elevator.js';
 import { BotManager, Bot, teamPalette, lookPalette } from './bots.js';
 import { loadDaily, dailyList, dailyEvent, familyOf, msToReset } from './challenges.js';
-import { Zombies, Royale, AMMO_COST, LOOT } from './modes.js';
+import { ZombieMode, ZMAP, BOX_POOL, DROPS } from './zombies.js';
+ARENAS.push(ZMAP);        // the zombies map: built with the arenas, but never in the team deathmatch rotation
 import { divisionOf, divHTML, crewHTML, loadRanked, rankedResult, loadCrew, saveCrew, CREW_COLS, cleanTag } from './social.js';
 import { PASS, REWARDS, loadPass, savePass, tierOf, tierProgress, payOut } from './pass.js';
 import { loadProgress, levelInfo, rankOf, badgeHTML, addXp, XP, LEVEL_CREDITS, GUN_LV, TD_LV, SKIN_LV, gunLocked, tdLocked, skinLocked, unlocksAt, levelOf } from './progress.js';
@@ -308,7 +309,7 @@ const elevator = new Elevator(world, map.elevator);
 const lifts = [];        // (no lifts in the arenas)
 const ai = new Deathmatch(world);           // team deathmatch against the AI
 let tdm = ai;                               // the match being played: the AI one, or an online one
-const zombies = new Zombies(world), royale = new Royale(world);     // the other offline modes (modes.js)
+const zombies = new ZombieMode(world);     // ZOMBIES, on its own map (zombies.js)
 let where = 'range';       // 'range' or 'stadium'
 const inStadium = () => where === 'stadium';
 let padCd = 0, voidT = 0;
@@ -707,7 +708,7 @@ function skinBurst(at, tex, tier, mine) {
 function hitTarget(dummy, dmg, head, point, dir, wname, burn = false) {
   lastHitPt = point;
   dummy.lastHead = head;
-  if (tdm.active && dummy.zombie) tdm.onHit?.(dummy);
+  if (tdm.active && dummy.zombie) { dummy.lastByMelee = !!weapon().def.melee; dmg = tdm.onHit?.(dummy, head, dmg) ?? dmg; }
   if (buffOn('overdrive') && wname !== 'BULL CHARGE') dmg *= 1.25;
   const num = { pos: [...point], amount: dmg, head, burn, t: 0, el: null, drift: Math.random() - 0.5 };
   if (dummy.remote) {
@@ -976,6 +977,14 @@ function damagePlayer(amount, from, name) {
   const dx = from[0] - player.pos[0], dz = from[2] - player.pos[2];
   dmgDirs.push({ ang: Math.atan2(-dx, -dz), t: 0 });
   if (dmgDirs.length > 6) dmgDirs.shift();
+  if (player.hp <= 0 && tdm === zombies && zombies.perks.has('revive') && !zombies.over) {
+    // REVIVE RUSH: back up, but the drinks are gone
+    zombies.perks.clear(); zApplyPerks();
+    Object.assign(player, { hp: player.maxHp, invuln: 3 });
+    banner('REVIVE RUSH', 'BACK ON YOUR FEET · YOUR DRINKS ARE GONE', 'good', 2);
+    sounds.checkpoint?.(); zombies.collect('nuke', botHooks);
+    return;
+  }
   if (player.hp <= 0) die(name);
 }
 
@@ -1470,7 +1479,9 @@ const modeDraw = { gunDef: (id) => defFor(id), gunPartsOf: (def, m) => Weapon.wo
 const botHooks = {
   zombieHit: (b) => sounds.zombieHit?.(Math.hypot(player.pos[0] - b.pos[0], player.pos[2] - b.pos[2])),
   groan: (p) => { const d = Math.hypot(player.pos[0] - p[0], player.pos[2] - p[2]); if (d < 22) sounds.groan?.(d, panOf(p)); },
-  ringHurt: (n) => { if (player.dead) return; player.lastHitBy = null; ringAcc += n; if (ringAcc >= 1) { const k = Math.floor(ringAcc); ringAcc -= k; damagePlayer(k, [player.pos[0] + 1, 0, player.pos[2]], 'THE RING'); } },
+  boxPick: () => BOX_POOL[Math.floor(Math.random() * BOX_POOL.length)],
+  boardTorn: (w) => { const d = Math.hypot(player.pos[0] - w.inside[0], player.pos[2] - w.inside[2]); sounds.boardBreak?.(d, panOf(w.inside)); },
+  maxAmmo: () => zFillAmmo(),
   humanFor: (who) => humanFor(who),
   settleBody: (b, dt) => settleBody(world, b, dt),
   player,
@@ -1565,6 +1576,13 @@ const botHooks = {
   },
   // after the death fall: the body breaks apart
   onShatter: (bot) => {
+    if (bot.zombie) {
+      // the dead go back to dust: a puff of ash and rot, no coins
+      const c = bodyPt(bot);
+      for (let i = 0; i < 26; i++) { const a = Math.random() * 6.283, sp = 0.6 + Math.random() * 2.2; effects.spawnPiece([c[0], c[1] + Math.random() * 0.4, c[2]], [0.06, 0.06, 0.06], [Math.cos(a) * sp, 0.8 + Math.random() * 2.4, Math.sin(a) * sp], Math.random() < 0.4 ? [0.3, 0.42, 0.18] : [0.08, 0.08, 0.07], 0.7 + Math.random() * 0.6, 0.5); }
+      effects.dust(bot.pos, 8);
+      return;
+    }
     if (bot.human) {
       // people don't break into blocks: the body bursts into a spray of coins and sparks in their team's colour
       const c = bodyPt(bot), kd = bot.killDir || [0, 1, 0], tc = bot.pal ? [...bot.pal.values()][0] : [1, 0.8, 0.3];
@@ -1951,7 +1969,7 @@ const hud = {
   speedo: $('speedo'), speedBar: $('speedbar'), speedNum: $('speednum'), chain: $('chain'),
   course: $('course'), courseTime: $('coursetime'), courseInfo: $('courseinfo'), flash: $('flash'), fade: $('fade'),
 };
-let hitTimer = 0, ringAcc = 0;
+let hitTimer = 0;
 // how far left (-1) or right (+1) of where you're looking a sound is
 function panOf(p) {
   const dx = p[0] - player.pos[0], dz = p[2] - player.pos[2], l = Math.hypot(dx, dz) || 1;
@@ -2110,7 +2128,7 @@ function updateHud(dt, fovRad) {
   updateMatchHud(dt);
   hud.ammo.textContent = w.def.melee ? '∞' : w.reloading && !w.reload.shell ? '--' : w.ammo;
   hud.ammo.classList.toggle('low', w.ammo <= Math.ceil(w.def.mag * 0.2));
-  hud.reserve.textContent = w.def.melee ? '' : `/ ${w.def.mag}`;
+  hud.reserve.textContent = w.def.melee ? '' : w.reserve != null ? `/ ${w.reserve}` : `/ ${w.def.mag}`;
   let rp = 0;
   if (w.reload && !w.reload.shell) rp = w.reload.t / w.reload.total;
   if (w.reload && w.reload.shell) rp = w.ammo / w.def.mag;
@@ -2493,7 +2511,7 @@ function refreshGuns() {
 // PLAY: matchmaking → loadout (30 s) → team intro → the arena. Once you're in a match, PLAY resumes it.
 let match = null;
 const mmk = new Matchmaking({
-  root: $('mmk'), classLo, sounds, maps: ARENAS.map((a) => a.name),
+  root: $('mmk'), classLo, sounds, maps: ARENAS.filter((a) => !a.hidden).map((a) => a.name),
   onChange: () => { classDirty = true; renderMenu(); },
   onCancel: () => { menu.classList.remove('hidden'); renderMenu(); },
   onDone: (m) => {
@@ -2508,7 +2526,7 @@ const mmk = new Matchmaking({
 });
 // ONLINE: host or join a room for 1v1 / 2v2 with friends
 const lobby = new Lobby(world, {
-  root: $('net'), arenas: ARENAS.map((a) => a.name), getClass: () => classLo.cls, getMe: () => ({ lv: levelOf(progress), look: myLook(), rk: ranked.rp, cr: crew ? { t: crew.tag, c: crew.col } : null }),
+  root: $('net'), arenas: ARENAS.filter((a) => !a.hidden).map((a) => a.name), getClass: () => classLo.cls, getMe: () => ({ lv: levelOf(progress), look: myLook(), rk: ranked.rp, cr: crew ? { t: crew.tag, c: crew.col } : null }),
   onClose: () => { menu.classList.remove('hidden'); renderMenu(); },
   onStart: (info) => startOnline(info),
   onHostLeft: () => { banner('HOST LEFT', 'MATCH OVER', 'bad', 2); setTimeout(() => endMatch(true), 1600); },
@@ -2629,21 +2647,12 @@ addEventListener('mousedown', () => {
   start();
 });
 $('mm-online').addEventListener('click', () => { sounds.unlock(); menu.classList.add('hidden'); lobby.show(); });
-// ZOMBIES and BATTLE ROYALE: straight in, no matchmaking. Zombies: you and two AI teammates; battle royale: you
-// and seven AI, each on their own. A random arena (battle royale prefers the big ones).
-const BR_NAMES = ['VIPER', 'NOVA', 'GHOST', 'BLAZE', 'RAVEN', 'TITAN', 'ECHO', 'FROST', 'JINX', 'ROGUE', 'ONYX', 'HAVOC'];
-function startMode(mode) {
+// ZOMBIES: straight in, no matchmaking, on its own map (THE BUNKER)
+function startMode() {
   sounds.unlock();
-  const big = ARENAS.map((a, i) => [i, (a.W || 30) * (a.D || 20) * (a.S || 1) ** 2]).sort((x, y) => y[1] - x[1]).slice(0, 5).map((x) => x[0]);
-  const mi = mode === 'royale' ? big[Math.floor(Math.random() * big.length)] : Math.floor(Math.random() * ARENAS.length);
-  const names = [...BR_NAMES].sort(() => Math.random() - 0.5);
-  const cls = () => CLASS_ORDER[Math.floor(Math.random() * 3)];
-  const me = { name: 'YOU', cls: classLo.cls, you: true };
-  const m = mode === 'zombies'
-    ? { mode, map: mi, teams: [{ name: 'SURVIVORS', col: '#ff7a1a', mine: true, players: [me, { name: names[0], cls: cls() }, { name: names[1], cls: cls() }] }, { name: 'THE HORDE', col: '#6a9a3c', mine: false, players: [] }] }
-    : { mode, map: mi, teams: [{ name: 'YOU', col: '#ff7a1a', mine: true, players: [me] }, { name: 'EVERYONE ELSE', col: '#2f8cff', mine: false, players: names.slice(0, 7).map((n) => ({ name: n, cls: cls() })) }] };
+  const m = { mode: 'zombies', map: ARENAS.indexOf(ZMAP), teams: [] };
   match = m;
-  stadium = ARENAS[mi];
+  stadium = ZMAP;
   where = 'none';
   classDirty = true;
   enterStadium();
@@ -2652,7 +2661,6 @@ function startMode(mode) {
   start();
 }
 $('mm-zombies').addEventListener('click', () => startMode('zombies'));
-$('mm-royale').addEventListener('click', () => startMode('royale'));
 addEventListener('keydown', (e) => {
   if (!lobby.open || e.target?.tagName === 'INPUT') return;
   if (e.code === 'Escape') { lobby.hide(); menu.classList.remove('hidden'); renderMenu(); }
@@ -2677,8 +2685,9 @@ function startMatch(m) {
   lastMatch = m;
   if (tdm === online || online.inRoom) { online.leave(); tdm = ai; }
   if (tdm !== ai) tdm.stop();
-  tdm = m.mode === 'zombies' ? zombies : m.mode === 'royale' ? royale : ai;
-  if (m.mode) { applyClass(); slots[0] = new Weapon(defFor('pistol')); current = 0; lastSlot = 1; weapon().equip(); updateSlotHud(); }   // zombies / battle royale: start with a pistol
+  tdm = m.mode === 'zombies' ? zombies : ai;
+  if (m.mode) { stadium = ZMAP; applyClass(); zStartKit(); }   // zombies: a pistol and your melee weapon
+  else if (slots.some((w) => w.reserve != null || w.baseDef)) applyClass();     // back from zombies: your own kit again
   batches.world = null;     // re-batch once the match props are set up
   gadgets.clear(); burning.clear(); heavy.clear(); heavyCd = 0; putAwayLauncher(false); playerTether = null; cloakT = 0; buffT = 0; playerBurn = null; throwCharges = 2; throwT = 0; flashT = 0;
   resetGlass();
@@ -2686,15 +2695,17 @@ function startMatch(m) {
   for (const a of ARENAS) a.navObj?.reset();
   navDirty.clear();
   tdm.start(m, stadium, player, classLo.cls);
-  setTeamsHud(m);
+  if (!tdm.mode) setTeamsHud(m);
   $('teams').classList.toggle('hidden', !!tdm.mode);
   const sp = tdm.myTeam.spawn || stadium.spawns[tdm.myTeam.idx];
   player.spawn(sp.pos, sp.yaw);
   Object.assign(player, { hp: player.maxHp, dead: false, invuln: 1 });
   $('matchend').classList.add('hidden');
+  zBoardT = 0;
 }
 function endMatch(toMenu) {
   if (tdm === online) { online.leave(); tdm = ai; } else { tdm.stop(); tdm = ai; }
+  if (slots.some((w) => w.reserve != null || w.baseDef)) applyClass();     // leaving zombies: your own kit again
   $('teams').classList.remove('hidden');
   gadgets.clear(); burning.clear(); heavy.clear(); heavyCd = 0; putAwayLauncher(false); playerTether = null; cloakT = 0; buffT = 0; playerBurn = null; throwCharges = 2; throwT = 0; flashT = 0;
   match = null; resultPose = '';
@@ -2705,22 +2716,23 @@ function endMatch(toMenu) {
 function matchEvents() {
   for (const ev of tdm.events) {
     if (ev.type === 'start') {
-      if (tdm.mode === 'zombies') banner('ZOMBIES', `${stadium.name} · SURVIVE AS LONG AS YOU CAN`, '', 2.6);
-      else if (tdm.mode === 'royale') banner('BATTLE ROYALE', `${stadium.name} · LOOT THE CRATES · LAST ONE STANDING`, '', 2.6);
+      if (tdm.mode === 'zombies') banner('ZOMBIES', `${stadium.name} · HOLD THE WINDOWS · SURVIVE`, '', 2.6);
       else banner('TEAM DEATHMATCH', `${stadium.name} · FIRST TO 10 KILLS`, '', 2.6);
       sounds.startRun?.();
     }
     else if (ev.type === 'round') { banner(`ROUND ${ev.n}`, ev.n === 1 ? 'HERE THEY COME' : 'THEY KEEP COMING', 'bad', 2.2); sounds.roundStart?.(); }
-    else if (ev.type === 'cleared') { if (ev.n) { banner(`ROUND ${ev.n} CLEARED`, 'TOP UP AT A BUY STATION', 'good', 2); sounds.finish?.(); } }
-    else if (ev.type === 'zkill') { if (ev.head) sounds.checkpoint?.(); }
+    else if (ev.type === 'cleared') { if (ev.n) { banner(`ROUND ${ev.n} CLEARED`, 'FIX THE WINDOWS · SPEND YOUR POINTS', 'good', 2); sounds.finish?.(); } }
+    else if (ev.type === 'door') { batches.world = null; sounds.boom?.(0.25); effects.dust(ev.d.pos, 14); }
+    else if (ev.type === 'drop') { banner(DROPS[ev.kind].name, { maxammo: 'EVERY GUN FILLED UP', insta: 'ONE HIT KILLS · 30 SECONDS', double: 'DOUBLE POINTS · 30 SECONDS', nuke: 'BOOM · +400', carpenter: 'EVERY WINDOW REBUILT · +200' }[ev.kind], 'good', 1.8); sounds.checkpoint?.(); if (ev.kind === 'nuke') { flashT = 0.6; sounds.boom?.(1); player.shake = 0.6; } }
+    else if (ev.type === 'dropSpawn') sounds.pickup?.();
+    else if (ev.type === 'boxReady' || ev.type === 'ampReady') sounds.coins?.();
     else if (ev.type === 'kill') {
       const mine = ev.team === tdm.myTeam, left = 10 - ev.team.kills;
       if (ev.killer === tdm.you) { sounds.checkpoint?.(); banner('ELIMINATED', ev.victim.name, 'good', 1); }
       if (left > 0 && left <= 3 && !tdm.over && !ev.remoteScore) banner(`${left} TO GO`, `${ev.team.name} ${mine ? '— YOUR TEAM' : ''}`.trim(), mine ? 'good' : 'bad', 1.4);
     } else if (ev.type === 'end' && tdm.mode) {
       const o = tdm.over;
-      if (tdm.mode === 'zombies') banner('GAME OVER', `YOU LASTED ${o.rounds} ROUND${o.rounds === 1 ? '' : 'S'}`, 'bad', 2.6);
-      else banner(o.won ? 'LAST ONE STANDING' : 'ELIMINATED', o.won ? 'YOU WIN THE BATTLE ROYALE' : `YOU PLACED #${o.place}`, o.won ? 'good' : 'bad', 2.6);
+      banner('GAME OVER', `YOU LASTED ${o.rounds} ROUND${o.rounds === 1 ? '' : 'S'}`, 'bad', 2.6);
       sounds.finish?.(); setTimeout(showMatchEnd, 2600);
     } else if (ev.type === 'end') { banner(`${ev.winner.name} WIN`, ev.winner === tdm.myTeam ? 'YOU ADVANCE' : 'ELIMINATED', ev.winner === tdm.myTeam ? 'good' : 'bad', 2.6); sounds.finish?.(); setTimeout(showMatchEnd, 2600); }
   }
@@ -2777,18 +2789,17 @@ function showMatchEnd() {
   el.classList.remove('hidden');
   if (document.pointerLockElement) document.exitPointerLock();
 }
-// the end of a zombies or battle royale game
+// the end of a zombies game
 function showModeEnd() {
-  const o = tdm.over, Z = tdm.mode === 'zombies';
+  const o = tdm.over;
   const card = el('div', 'me-card');
-  const win = Z ? o.rounds >= 10 : o.won;
-  const t = el('b', win ? 'win' : 'lose', Z ? `YOU LASTED ${o.rounds} ROUND${o.rounds === 1 ? '' : 'S'}` : o.won ? 'LAST ONE STANDING' : `YOU PLACED #${o.place} OF ${tdm.teams.length}`);
-  card.append(el('small', null, `${Z ? 'ZOMBIES' : 'BATTLE ROYALE'} · ${stadium.name}`), t);
+  const win = o.rounds >= 10;
+  card.append(el('small', null, `ZOMBIES · ${stadium.name}`), el('b', win ? 'win' : 'lose', `YOU LASTED ${o.rounds} ROUND${o.rounds === 1 ? '' : 'S'}`));
   if (!o.paid) {
     o.paid = true;
-    if (Z) { earn(40 * o.rounds + 4 * o.kills); gainXp(120 * o.rounds + 15 * o.kills, 'ZOMBIES'); }
-    else { earn(o.won ? 500 : Math.max(50, (tdm.teams.length + 1 - o.place) * 45)); gainXp(o.won ? XP.win + 300 : XP.loss + (tdm.teams.length - o.place) * 60, 'BATTLE ROYALE'); if (o.won) dailyHit({ type: 'win' }); }
+    earn(40 * o.rounds + 4 * o.kills); gainXp(120 * o.rounds + 15 * o.kills, 'ZOMBIES');
     dailyHit({ type: 'match' });
+    try { const best = +(localStorage.getItem('sf-zbest') || 0); o.best = Math.max(best, o.rounds); o.newBest = o.rounds > best; localStorage.setItem('sf-zbest', String(o.best)); } catch { o.best = o.rounds; }
   }
   card.append(el('p', 'me-cred', `+${fmt(matchEarned)} ${CURRENCY} EARNED · ${fmt(cosmetics.credits)} TOTAL`));
   const li = levelInfo(progress.xp), rk = rankOf(li.level);
@@ -2796,8 +2807,11 @@ function showModeEnd() {
   xp.innerHTML = `<div class="me-xp-top">${badgeHTML(li.level)} <b>LEVEL ${li.level} · ${rk.name}</b><span>+${fmt(matchXp)} XP</span></div><i style="--p:${li.max ? 1 : (li.into / li.need).toFixed(3)}"></i>`;
   card.append(xp);
   const row = (i, name, val, mine) => { const r = el('div', `me-row${mine ? ' mine' : ''}`); r.style.setProperty('--t', mine ? '#ff7a1a' : '#888'); r.innerHTML = `<i>${i}</i><b></b><span></span>`; r.querySelector('b').textContent = name; r.querySelector('span').textContent = val; card.append(r); };
-  if (Z) { row('★', 'ROUNDS SURVIVED', String(o.rounds), true); row('☠', 'ZOMBIES KILLED', String(o.kills), false); row('◆', 'POINTS', fmt(tdm.points), false); }
-  else [...tdm.entities()].sort((a, b) => (b.kills || 0) - (a.kills || 0)).slice(0, 8).forEach((e, i) => row(i + 1, e.name, `${e.kills || 0} KILLS`, e === tdm.you));
+  row('★', o.newBest ? 'ROUNDS SURVIVED · NEW BEST!' : 'ROUNDS SURVIVED', String(o.rounds), true);
+  row('◎', 'BEST EVER', String(o.best ?? o.rounds), false);
+  row('☠', 'ZOMBIES KILLED', String(o.kills), false);
+  row('✚', 'HEADSHOTS', String(tdm.heads), false);
+  row('◆', 'POINTS LEFT', fmt(tdm.points), false);
   const btn = (text, fn, cls = '') => { const b = el('button', cls, text); b.type = 'button'; b.onclick = fn; card.append(b); };
   btn('PLAY AGAIN', () => { $('matchend').classList.add('hidden'); startMatch(lastMatch); start(); });
   btn('BACK TO LOBBY', () => endMatch(true), 'alt');
@@ -2831,35 +2845,116 @@ function openCrew() {
   box.onclick = (e) => { if (e.target === box) close(); };
   nm.focus();
 }
-// ---- the modes' things to use: buy stations (zombies) and loot crates (battle royale)
+// ---- zombies: your guns (limited spare ammo), the drinks, and the things you can use round the bunker
+let zBoardT = 0;
+const reserveFor = (def) => (def.melee ? null : Math.max(24, Math.round(def.mag * (def.mag <= 2 ? 14 : 5))));
+const ampDef = (base) => {
+  const lum = (c) => c[0] * 0.3 + c[1] * 0.59 + c[2] * 0.11;
+  return { ...base, name: `${base.name} MK II`, dmg: base.dmg * 2.2, mag: Math.round(base.mag * 1.5), amped: true, liveSkin: 45,
+    parts: base.parts.map((p) => (p.em || p.m === 'glass' ? p : { ...p, tex: 45, col: [0, lum(p.col), 0] })) };
+};
+// a gun as the drinks make it: faster reloads (SPEED SPLASH), faster fire (DOUBLE BREW)
+function zArm(w, fill = true) {
+  if (!w || w.def.melee) return;
+  const base = w.baseDef || w.def;
+  w.baseDef = base;
+  const P = zombies.perks, r = P.has('speed') ? 0.5 : 1, f = P.has('brew') ? 1.33 : 1;
+  w.def = { ...base, reload: base.reload * r, reloadEmpty: (base.reloadEmpty ?? base.reload) * r, shellTime: base.shellTime ? base.shellTime * r : base.shellTime, rpm: base.rpm * f };
+  if (fill) { w.ammo = base.mag; w.reserve = reserveFor(base); }
+}
+function zApplyPerks() {
+  for (const w of slots) zArm(w, false);
+  const hp0 = player.maxHp, max = 150 * (zombies.perks.has('tank') ? 2.5 : 1);
+  player.maxHp = max;
+  player.hp = Math.min(max, player.hp + Math.max(0, max - hp0));
+}
+function zStartKit() {
+  slots[0] = new Weapon(defFor('pistol'));
+  slots[1] = slots[0];       // one gun to start with: both gun slots point at it until you buy a second
+  current = 0; lastSlot = 2;
+  player.maxHp = player.hp = 150;
+  zArm(slots[0]);
+  weapon().equip(); updateSlotHud();
+}
+function zFillAmmo() { for (const w of new Set(slots)) if (!w.def.melee) { w.ammo = w.def.mag; w.reserve = reserveFor(w.baseDef || w.def); } sounds.magIn?.(); }
+// a gun bought, from the box or the amplifier: into your hands (the primary slot unless you've got two guns already)
+function zGive(def) {
+  if (launcherW) putAwayLauncher(false);
+  const w = new Weapon(def);
+  // two guns at most: if both gun slots hold the same gun (the start), fill the empty one; otherwise swap out the one in your hands
+  let slot = slots[0] === slots[1] ? (current === 2 ? 1 : 1) : current === 2 ? 0 : current;
+  slots[slot] = w;
+  zArm(w);
+  if (current !== slot) { lastSlot = current; current = slot; }
+  w.equip();
+  sounds.pickup();
+  updateSlotHud();
+}
 function modeUse() {
-  if (!tdm.active || !inStadium() || player.dead) return null;
-  if (tdm.mode === 'zombies') {
-    const s = tdm.stationAt(player.pos);
-    if (!s) return null;
-    const def = WEAPONS[s.buy.id], held = slots.findIndex((w) => w.def.id === s.buy.id);
-    const cost = held >= 0 ? AMMO_COST : s.buy.cost;
-    return { text: held >= 0 ? `AMMO FOR <b>${def.name}</b>` : `BUY <b>${def.name}</b>`, cost, ok: tdm.points >= cost,
-      use: () => {
-        if (tdm.points < cost) { sounds.denied?.(); banner('NOT ENOUGH POINTS', `${fmt(cost)} NEEDED`, 'bad', 1.2); return; }
-        tdm.points -= cost;
-        if (held >= 0) { slots[held].ammo = slots[held].def.mag; sounds.magIn?.(); } else pickUp(def);
-        sounds.coins?.();
-      } };
+  if (tdm !== zombies || !tdm.active || !inStadium() || player.dead) return null;
+  const Z = zombies, u = Z.useAt(player, [-Math.sin(player.yaw), 0, -Math.cos(player.yaw)]);
+  if (!u) return null;
+  const pay = (c) => { if (Z.points < c) { sounds.denied?.(); banner('NOT ENOUGH POINTS', `${fmt(c)} NEEDED`, 'bad', 1.2); return false; } Z.points -= c; sounds.coins?.(); return true; };
+  const held = (id) => slots.find((w) => !w.def.melee && (w.baseDef || w.def).id === id && !(w.baseDef || w.def).amped);
+  if (u.kind === 'info') return { ...u, use: () => sounds.denied?.() };
+  if (u.kind === 'door') return { ...u, use: () => { if (pay(u.cost)) Z.openDoor(u.d); } };
+  if (u.kind === 'power') return { ...u, use: () => { Z.power = true; banner('POWER ON', 'THE DRINKS AND THE AMPLIFIER ARE WORKING', 'good', 2.2); sounds.boom?.(0.5); sounds.roundStart?.(); } };
+  if (u.kind === 'wall') {
+    const def = defFor(u.wb.id), h = held(u.wb.id), cost = h ? Math.round(u.cost / 2) : u.cost;
+    return { ...u, cost, ok: Z.points >= cost, text: h ? `AMMO FOR <b>${def.name}</b>` : `BUY <b>${def.name}</b>`,
+      use: () => { if (h && h.ammo >= h.def.mag && h.reserve >= reserveFor(h.baseDef || h.def)) { sounds.denied?.(); return; } if (!pay(cost)) return; if (h) { h.ammo = h.def.mag; h.reserve = reserveFor(h.baseDef || h.def); sounds.magIn?.(); } else zGive(def); } };
   }
-  if (tdm.mode === 'royale') {
-    const c = tdm.crateNear(player.pos, 1.9);
-    if (!c) return null;
-    return { text: 'OPEN <b>CRATE</b>', cost: 0, ok: true,
-      use: () => {
-        tdm.openCrate(c, tdm.you);
-        const def = WEAPONS[c.loot.id], tier = c.loot.tier;
-        pickUp(def);
-        effects.sparks([c.pos[0], c.pos[1] + 0.7, c.pos[2]], 40, tier[1], 5, 0.8, 0.04, 3);
-        banner(def.name, `${tier[0]} ${def.type}`, tier[0] === 'COMMON' ? '' : 'good', 1.6);
-        sounds.coins?.(); sounds.pickup();
-      } };
+  if (u.kind === 'box') return { ...u, use: () => {
+    if (!pay(u.cost)) return;
+    const have = new Set(slots.map((w) => (w.baseDef || w.def).id)), pool = BOX_POOL.filter((id) => !have.has(id) && defFor(id));
+    const B = Z.box;
+    B.gun = pool[Math.floor(Math.random() * pool.length)] || 'smg'; B.gunName = defFor(B.gun).name;
+    Object.assign(B, { state: 'spin', t: 0, flip: 0 });
+    sounds.rackSpin?.();
+  } };
+  if (u.kind === 'boxtake') return { ...u, text: `TAKE <b>${Z.box.gunName}</b>`, use: () => { const B = Z.box; zGive(defFor(B.gun)); Object.assign(B, { state: 'closed', gun: null, shown: null }); } };
+  if (u.kind === 'perk') return { ...u, use: () => {
+    if (!pay(u.cost)) return;
+    Z.perks.add(u.m.id); zApplyPerks();
+    banner(u.m.name, u.m.desc.toUpperCase(), 'good', 1.8); sounds.pickup?.();
+  } };
+  if (u.kind === 'amp') {
+    const w = weapon(), base = w.baseDef || w.def;
+    if (w.def.melee || base.amped) return { ...u, text: base.amped ? '<b>AMPLIFIER</b> · THAT GUN IS ALREADY AMPLIFIED' : '<b>AMPLIFIER</b> · HOLD A GUN', cost: 0, use: () => sounds.denied?.() };
+    return { ...u, text: `AMPLIFY <b>${base.name}</b> · DOUBLE DAMAGE, BIGGER MAG`, use: () => {
+      if (!pay(u.cost)) return;
+      const A = Z.amp;
+      A.gun = ampDef(base); A.gunName = A.gun.name; A.slot = current;
+      Object.assign(A, { state: 'work', t: 0 });
+      // the machine takes your gun while it works
+      const other = [0, 1].find((i) => i !== current && !slots[i].def.melee && slots[i] !== w);
+      if (slots[0] === slots[1]) { slots[0] = slots[1] = new Weapon(defFor('knife')); }
+      else slots[current] = slots[other ?? 2];
+      switchTo(other ?? 2); updateSlotHud();
+      sounds.rackSpin?.();
+    } };
   }
+  if (u.kind === 'amptake') return { ...u, text: `TAKE <b>${Z.amp.gunName}</b>`, use: () => {
+    const A = Z.amp, w = new Weapon(A.gun);
+    w.baseDef = A.gun;
+    const slot = slots[0].def.melee ? 0 : slots[1].def.melee || slots[1] === slots[0] ? 1 : current === 2 ? 0 : current;
+    if (slots[0] === slots[1]) { if (slots[0].def.melee) slots[0] = slots[1] = w; else slots[A.slot ?? 0] = w; } else slots[slot] = w;
+    zArm(w);
+    const at = slots.indexOf(w);
+    if (current !== at) { lastSlot = current; current = at; }
+    w.equip(); updateSlotHud(); sounds.pickup(); sounds.checkpoint?.();
+    Object.assign(A, { state: 'idle', gun: null });
+  } };
+  if (u.kind === 'board') return { ...u, use: (dt) => {
+    zBoardT += dt;
+    if (zBoardT < 0.55) return;
+    zBoardT = 0;
+    const w = u.w;
+    if (w.boards >= 5) return;
+    w.boards++;
+    if (Z.boardPts < 500) { Z.boardPts += 10; Z.add(10); }
+    sounds.meleeWall?.(); effects.dust(w.inside, 3);
+  } };
   return null;
 }
 const markerEls = [], tagEls = [];
@@ -2949,7 +3044,7 @@ function updateMatchHud(dt) {
   let n = 0;
   for (const a of agents) {
     const ally = a.team === tdm.myTeam;
-    if (!a.alive || (!ally && !a.seen)) continue;
+    if (!a.alive || a.zombie || (!ally && !a.seen)) continue;
     const sp = project([a.pos[0], a.pos[1] + 2.2 * a.bot.sc, a.pos[2]]);
     if (!sp || sp[0] < 0 || sp[0] > innerWidth || sp[1] < 0 || sp[1] > innerHeight) continue;
     const el = poolEl(tagEls, $('tags'), 'tag', n++);
@@ -3585,6 +3680,7 @@ function frameBody(now) {
     else if (nearCase?.ammo && input.hit('KeyE')) { slots.forEach((w) => { w.ammo = w.def.mag; }); sounds.magIn?.(); sounds.pickup(); }
     else if (nearCase && input.hit('KeyE')) useRack(nearCase);
     else if (nearBench && input.hit('KeyE')) openBench();
+    else if (modeThing?.hold) { if (input.down('KeyE')) modeThing.use(dt); else zBoardT = 0; }
     else if (modeThing && input.hit('KeyE')) modeThing.use();
     w = weapon();
     // only your class's equipped specialisation works
@@ -3613,6 +3709,7 @@ function frameBody(now) {
     if (inStadium()) for (const c of stadium.cargo || []) c.update(dt, player);
     // heavier guns slow you down; a spinning minigun slows you a lot more
     player.speedMul = CLASSES[classLo.cls].speed * (w.def.moveMul ?? 1) * (w.def.spin && (w.spinT || 0) > 0.05 ? 0.72 : 1) * (buffOn('stim') ? 1.3 : buffOn('fortify') ? 0.8 : 1);
+    player.killY = inStadium() ? stadium.voidY - 20 : -30;     // (the zombies bunker is deep underground)
     player.update(dt, input, { ads: w.ads, firing: input.fireDown && w.ammo > 0 && !w.reloading && !player.trav, act });
     if (playerTether) {
       // tied down: you can't get further than the line's length from the spike
@@ -3820,4 +3917,4 @@ function frameBody(now) {
 requestAnimationFrame(frame);
 
 // handy for debugging from the console / automated tests
- window.game = { kf: (...a) => killFeed(...a), daily, gainXp: (n, l) => gainXp(n, l), progress, skinLive: (h, s) => { skinHeat = h; skinStreak = s; }, startTakedown, updateTakedown, findDowned, takedownParts, get td() { return td; }, get deathT() { return deathT; }, useRack, skinKill, ranked, get crew() { return crew; }, openCrew, startMode, zombies, royale, modeUse: () => modeThing, pass, passXp, buyPremium, meleeTargets: (r, a, m) => { updateCamera(); return meleeTargets(r, a, m).map((t) => ({ dist: t.dist })); }, camFwd: () => camFwd, redeemCode, useBuff, get buff() { return { kind: buffKind, t: buffT }; }, setThrow: (k) => { equippedThrow = k; throwCharges = 2; }, useThrowable, get throwCharges() { return throwCharges; }, get flashT() { return flashT; }, heavy, useHeavy, applyClass, useGadget, useTether, useCloak, get cloakT() { return cloakT; }, get launcherW() { return launcherW; }, gadgets, get burning() { return burning; }, lobby, online, get tdm() { return tdm; }, batches, renderer, map, ARENAS, get stadium() { return stadium; }, setArena: (i) => { stadium = ARENAS[i]; }, lifts, hooks: botHooks, updateFall, hookTarget, fallTop: () => fallTop, breakGlass, updateCombat, startMatch: (m) => startMatch(m), enterStadium, where: () => where, sr: () => showroomChar, cosmetics, refreshGuns, classLo, renderMenu, showTab, enterRange, cs: () => cutscene, botMgr, elevator, damagePlayer, pressConsole, setTimeScale: (v) => { timeScale = v; }, bench, openBench, closeBench, loadouts, applyLoadout, course, player, slots, weapon, world, stats, effects, dummies, walls, cases, input, start, setPlaying, resetRange, switchTo, pickUp, WEAPONS };
+ window.game = { kf: (...a) => killFeed(...a), daily, gainXp: (n, l) => gainXp(n, l), progress, skinLive: (h, s) => { skinHeat = h; skinStreak = s; }, startTakedown, updateTakedown, findDowned, takedownParts, get td() { return td; }, get deathT() { return deathT; }, useRack, skinKill, ranked, get crew() { return crew; }, openCrew, startMode, zombies, ZMAP, zFillAmmo, modeUse: () => modeThing, modeUseNow: () => modeUse(), fireNow: () => { updateCamera(); fire(weapon()); }, pass, passXp, buyPremium, meleeTargets: (r, a, m) => { updateCamera(); return meleeTargets(r, a, m).map((t) => ({ dist: t.dist })); }, camFwd: () => camFwd, redeemCode, useBuff, get buff() { return { kind: buffKind, t: buffT }; }, setThrow: (k) => { equippedThrow = k; throwCharges = 2; }, useThrowable, get throwCharges() { return throwCharges; }, get flashT() { return flashT; }, heavy, useHeavy, applyClass, useGadget, useTether, useCloak, get cloakT() { return cloakT; }, get launcherW() { return launcherW; }, gadgets, get burning() { return burning; }, lobby, online, get tdm() { return tdm; }, batches, renderer, map, ARENAS, get stadium() { return stadium; }, setArena: (i) => { stadium = ARENAS[i]; }, lifts, hooks: botHooks, updateFall, hookTarget, fallTop: () => fallTop, breakGlass, updateCombat, startMatch: (m) => startMatch(m), enterStadium, where: () => where, sr: () => showroomChar, cosmetics, refreshGuns, classLo, renderMenu, showTab, enterRange, cs: () => cutscene, botMgr, elevator, damagePlayer, pressConsole, setTimeScale: (v) => { timeScale = v; }, bench, openBench, closeBench, loadouts, applyLoadout, course, player, slots, weapon, world, stats, effects, dummies, walls, cases, input, start, setPlaying, resetRange, switchTo, pickUp, WEAPONS };

@@ -705,10 +705,10 @@ body:has(#matchend:not(.hidden)) .mm-page { visibility: hidden; }
   #killcam .kc-who { position: absolute; left: 50%; top: calc(9vh + 60px); transform: translateX(-50%); font: 800 16px var(--font); letter-spacing: .12em; color: #fff; text-shadow: 0 2px 6px #000; }
   #killcam .kc-skip { position: absolute; right: 24px; bottom: calc(9vh + 16px); font: 700 13px var(--font); letter-spacing: .08em; color: #fff; opacity: .8; }
   #killcam .kc-skip kbd { background: #fff; color: #111; font: 800 12px var(--font); padding: 1px 6px; margin-right: 4px; }
-  .mm-modes { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; } .mm-modes .mm-card span { font-size: 10px; }
+  .mm-modes { display: grid; grid-template-columns: 1fr; gap: 8px; } .mm-modes .mm-card span { font-size: 10px; }
   .mm-modes .mm-card i { display: none; } .mm-modes .mm-card b { font-size: clamp(22px, 2.6vw, 34px); line-height: 1; }
   @media (max-width: 1500px) { .mm-ranked small { display: none; } .mm-ranked { padding: 4px 8px; } }
-  #mm-zombies { --c: #9fe06a; } #mm-royale { --c: #4aa8ff; }
+  #mm-zombies { --c: #9fe06a; }
   #prompt span.no { color: #ff5a3a; }
   /* ranked divisions and crews */
   .dv { display: inline-flex; align-items: center; justify-content: center; min-width: 20px; height: 20px; padding: 0 3px; background: var(--dv); color: #111; font: 900 12px var(--font);
@@ -870,7 +870,7 @@ body:has(#matchend:not(.hidden)) .mm-page { visibility: hidden; }
 
   <section class="mm-page mm-home" data-page="home">
     <div class="mm-col mm-home-left">
-      <div class="mm-kicker">SEASON 1 · BUILD 0.68</div>
+      <div class="mm-kicker">SEASON 1 · BUILD 0.69</div>
       <button class="mm-big" id="mm-play" type="button">
         <span class="mm-big-t">PLAY</span>
         <span class="mm-big-s" id="mm-play-sub">SEMI-FINALS · FIND A MATCH</span>
@@ -879,8 +879,7 @@ body:has(#matchend:not(.hidden)) .mm-page { visibility: hidden; }
         <b>TEST RANGE</b><span id="mm-range-sub">GUNS · MOVEMENT · PARKOUR · BOTS</span><i>▶</i>
       </button>
       <div class="mm-modes">
-        <button class="mm-card mm-range mm-mode" id="mm-zombies" type="button"><b>ZOMBIES</b><span>SURVIVE THE WAVES · BUY GUNS</span><i>▶</i></button>
-        <button class="mm-card mm-range mm-mode" id="mm-royale" type="button"><b>BATTLE ROYALE</b><span>8 PLAYERS · LOOT · THE RING</span><i>▶</i></button>
+        <button class="mm-card mm-range mm-mode" id="mm-zombies" type="button"><b>ZOMBIES</b><span>THE BUNKER · ROUNDS · DOORS · PERKS · MYSTERY BOX</span><i>▶</i></button>
       </div>
       <button class="mm-card mm-range mm-online" id="mm-online" type="button">
         <b>ONLINE</b><span>1V1 · 2V2 · PLAY WITH FRIENDS</span><i>▶</i>
@@ -1000,46 +999,46 @@ body:has(#matchend:not(.hidden)) .mm-page { visibility: hidden; }
 <script type="importmap">
 {
  "imports": {
-  "./src/attachments.js": "./src/attachments.js?v=0.68-1794994744",
-  "./src/audio.js": "./src/audio.js?v=0.68-1794994744",
-  "./src/batch.js": "./src/batch.js?v=0.68-1794994744",
-  "./src/bench.js": "./src/bench.js?v=0.68-1794994744",
-  "./src/bots.js": "./src/bots.js?v=0.68-1794994744",
-  "./src/challenges.js": "./src/challenges.js?v=0.68-1794994744",
-  "./src/classes.js": "./src/classes.js?v=0.68-1794994744",
-  "./src/contestant.js": "./src/contestant.js?v=0.68-1794994744",
-  "./src/cosmetics.js": "./src/cosmetics.js?v=0.68-1794994744",
-  "./src/course.js": "./src/course.js?v=0.68-1794994744",
-  "./src/effects.js": "./src/effects.js?v=0.68-1794994744",
-  "./src/elevator.js": "./src/elevator.js?v=0.68-1794994744",
-  "./src/fighter.js": "./src/fighter.js?v=0.68-1794994744",
-  "./src/gadgets.js": "./src/gadgets.js?v=0.68-1794994744",
-  "./src/heavy.js": "./src/heavy.js?v=0.68-1794994744",
-  "./src/input.js": "./src/input.js?v=0.68-1794994744",
-  "./src/main.js": "./src/main.js?v=0.68-1794994744",
-  "./src/maps/arenas.js": "./src/maps/arenas.js?v=0.68-1794994744",
-  "./src/maps/testRange.js": "./src/maps/testRange.js?v=0.68-1794994744",
-  "./src/matchmaking.js": "./src/matchmaking.js?v=0.68-1794994744",
-  "./src/math.js": "./src/math.js?v=0.68-1794994744",
-  "./src/modes.js": "./src/modes.js?v=0.68-1794994744",
-  "./src/nav.js": "./src/nav.js?v=0.68-1794994744",
-  "./src/net.js": "./src/net.js?v=0.68-1794994744",
-  "./src/pass.js": "./src/pass.js?v=0.68-1794994744",
-  "./src/player.js": "./src/player.js?v=0.68-1794994744",
-  "./src/progress.js": "./src/progress.js?v=0.68-1794994744",
-  "./src/props.js": "./src/props.js?v=0.68-1794994744",
-  "./src/renderer.js": "./src/renderer.js?v=0.68-1794994744",
-  "./src/rig.js": "./src/rig.js?v=0.68-1794994744",
-  "./src/social.js": "./src/social.js?v=0.68-1794994744",
-  "./src/takedown.js": "./src/takedown.js?v=0.68-1794994744",
-  "./src/tdm.js": "./src/tdm.js?v=0.68-1794994744",
-  "./src/thumbs.js": "./src/thumbs.js?v=0.68-1794994744",
-  "./src/weapon.js": "./src/weapon.js?v=0.68-1794994744",
-  "./src/weapons.js": "./src/weapons.js?v=0.68-1794994744",
-  "./src/world.js": "./src/world.js?v=0.68-1794994744"
+  "./src/attachments.js": "./src/attachments.js?v=0.69-1794997320",
+  "./src/audio.js": "./src/audio.js?v=0.69-1794997320",
+  "./src/batch.js": "./src/batch.js?v=0.69-1794997320",
+  "./src/bench.js": "./src/bench.js?v=0.69-1794997320",
+  "./src/bots.js": "./src/bots.js?v=0.69-1794997320",
+  "./src/challenges.js": "./src/challenges.js?v=0.69-1794997320",
+  "./src/classes.js": "./src/classes.js?v=0.69-1794997320",
+  "./src/contestant.js": "./src/contestant.js?v=0.69-1794997320",
+  "./src/cosmetics.js": "./src/cosmetics.js?v=0.69-1794997320",
+  "./src/course.js": "./src/course.js?v=0.69-1794997320",
+  "./src/effects.js": "./src/effects.js?v=0.69-1794997320",
+  "./src/elevator.js": "./src/elevator.js?v=0.69-1794997320",
+  "./src/fighter.js": "./src/fighter.js?v=0.69-1794997320",
+  "./src/gadgets.js": "./src/gadgets.js?v=0.69-1794997320",
+  "./src/heavy.js": "./src/heavy.js?v=0.69-1794997320",
+  "./src/input.js": "./src/input.js?v=0.69-1794997320",
+  "./src/main.js": "./src/main.js?v=0.69-1794997320",
+  "./src/maps/arenas.js": "./src/maps/arenas.js?v=0.69-1794997320",
+  "./src/maps/testRange.js": "./src/maps/testRange.js?v=0.69-1794997320",
+  "./src/matchmaking.js": "./src/matchmaking.js?v=0.69-1794997320",
+  "./src/math.js": "./src/math.js?v=0.69-1794997320",
+  "./src/nav.js": "./src/nav.js?v=0.69-1794997320",
+  "./src/net.js": "./src/net.js?v=0.69-1794997320",
+  "./src/pass.js": "./src/pass.js?v=0.69-1794997320",
+  "./src/player.js": "./src/player.js?v=0.69-1794997320",
+  "./src/progress.js": "./src/progress.js?v=0.69-1794997320",
+  "./src/props.js": "./src/props.js?v=0.69-1794997320",
+  "./src/renderer.js": "./src/renderer.js?v=0.69-1794997320",
+  "./src/rig.js": "./src/rig.js?v=0.69-1794997320",
+  "./src/social.js": "./src/social.js?v=0.69-1794997320",
+  "./src/takedown.js": "./src/takedown.js?v=0.69-1794997320",
+  "./src/tdm.js": "./src/tdm.js?v=0.69-1794997320",
+  "./src/thumbs.js": "./src/thumbs.js?v=0.69-1794997320",
+  "./src/weapon.js": "./src/weapon.js?v=0.69-1794997320",
+  "./src/weapons.js": "./src/weapons.js?v=0.69-1794997320",
+  "./src/world.js": "./src/world.js?v=0.69-1794997320",
+  "./src/zombies.js": "./src/zombies.js?v=0.69-1794997320"
  }
 }
 </script>
-<script type="module" src="src/main.js?v=0.68-1794994744"></script>
+<script type="module" src="src/main.js?v=0.69-1794997320"></script>
 </body>
 </html>

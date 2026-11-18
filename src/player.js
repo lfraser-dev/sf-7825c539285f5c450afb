@@ -320,7 +320,7 @@ export class Player {
       if (!done && !this.grapple && !this.slam) this.tryWallRun(strafe);
     }
 
-    if (this.pos[1] < -30) this.respawn();
+    if (this.pos[1] < (this.killY ?? -30)) this.respawn();
     this.cameraFeel(dt, strafe);
   }
 

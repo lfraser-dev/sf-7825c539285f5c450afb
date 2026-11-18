@@ -277,7 +277,7 @@ export class Weapon {
 
   startReload(ctx) {
     const d = this.def;
-    if (this.reload || this.ammo >= d.mag || this.equipT < 0.8) return;
+    if (this.reload || this.ammo >= d.mag || this.equipT < 0.8 || this.reserve === 0) return;     // (reserve: spare ammo, null = endless)
     this.cycleT = null;
     if (d.reloadStyle === 'shell') {
       this.reload = { shell: true, stage: 'in', t: 0, interrupt: false, needPump: this.ammo === 0 };
@@ -304,7 +304,7 @@ export class Weapon {
       if (crossed(p0, p, 0.6)) { s?.magIn(); this.events.push({ type: 'jolt', amt: 0.6 }); }
       if (r.empty && !d.slide && crossed(p0, p, 0.82)) this.events.push({ type: 'jolt', amt: 0.8 });
       if (r.empty && d.slide && crossed(p0, p, 0.82)) { s?.bolt(); this.events.push({ type: 'jolt', amt: 0.5 }); }
-      if (p >= 0.64 && !r.filled) { r.filled = true; this.ammo = d.mag; }
+      if (p >= 0.64 && !r.filled) { r.filled = true; const take = this.reserve == null ? d.mag - this.ammo : Math.min(d.mag - this.ammo, this.reserve); this.ammo += take; if (this.reserve != null) this.reserve -= take; }
       if (crossed(p0, p, 0.36)) s?.spin();
       if (crossed(p0, p, 0.87)) s?.spin();
       if (crossed(p0, p, 0.985)) { s?.catch?.(); this.events.push({ type: 'jolt', amt: 0.35 }); }
@@ -315,10 +315,10 @@ export class Weapon {
     if (r.stage === 'in') {
       if (r.t >= 0.28) { r.stage = 'load'; r.t = 0; }
     } else if (r.stage === 'load') {
-      if (crossed(prev, r.t, d.shellTime * 0.62)) { this.ammo = Math.min(d.mag, this.ammo + 1); s?.shell(); }
+      if (crossed(prev, r.t, d.shellTime * 0.62) && this.reserve !== 0) { this.ammo = Math.min(d.mag, this.ammo + 1); if (this.reserve != null) this.reserve--; s?.shell(); }
       if (r.t >= d.shellTime) {
         r.t = 0;
-        if (this.ammo >= d.mag || r.interrupt) r.stage = 'out';
+        if (this.ammo >= d.mag || r.interrupt || this.reserve === 0) r.stage = 'out';
       }
     } else if (r.stage === 'out') {
       const len = r.needPump ? 0.62 : 0.34;

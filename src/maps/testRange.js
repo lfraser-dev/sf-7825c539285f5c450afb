@@ -202,7 +202,8 @@ export default {
       { name: 'SHOTGUNS', o: [6.8, 2.35, AR.z1], n: [0, -1], fam: 'shotgun', w: 1.26, gap: 1.8, col: [1, 0.72, 0.1] },
       { name: 'SNIPERS', o: [6.8, 1.3, AR.z1], n: [0, -1], fam: 'sniper', w: 1.45, gap: 2.2, col: [0.4, 1, 0.45] },
       { name: 'MACHINE GUNS', o: [AR.x0, 1.75, 40], n: [1, 0], fam: 'lmg', w: 1.4, gap: 2.25, col: [0.9, 0.2, 0.25] },
-      { name: 'SIDEARMS', o: [AR.x1, 1.6, 41.2], n: [-1, 0], fam: 'pistol', w: 0.55, gap: 0.85, col: [0.75, 0.45, 1] },
+      { name: 'SIDEARMS', o: [AR.x1, 1.6, 41.6], n: [-1, 0], fam: 'pistol', w: 0.55, gap: 0.85, col: [0.75, 0.45, 1] },
+      { name: 'MELEE', o: [AR.x1, 1.6, 37.8], n: [-1, 0], ids: ['knife', 'katana', 'hammer'], w: 0.9, gap: 1.0, col: [0.9, 0.9, 0.95] },
     ],
     ammo: [AR.x1 - 0.45, 1.15, 35.4],
   },
@@ -514,11 +515,13 @@ function buildArmoury(add, deco, S) {
   back([-11.7, 0.85, z1 - 0.05], [-1.9, 2.8, z1]);
   back([1.9, 0.85, z1 - 0.05], [11.7, 2.8, z1]);
   back([x0, 0.95, 35.4], [x0 + 0.05, 2.55, 44.6]);
-  back([x1 - 0.05, 1.15, 38.9], [x1, 2.05, 43.5]);
+  back([x1 - 0.05, 1.15, 39.7], [x1, 2.05, 43.5]);
+  back([x1 - 0.05, 1.15, 36.3], [x1, 2.05, 39.3]);
+  blockText('MELEE', x1 - 0.07, 2.55, 37.8, 0.26, 'w', [1, 1, 1], 0.7).forEach(add);
   blockText('RIFLES + SMGS', -6.8, 3.55, z1 - 0.07, 0.36, 'n', [1, 1, 1], 0.7).forEach(add);
   blockText('SHOTGUNS + SNIPERS', 6.8, 3.55, z1 - 0.07, 0.36, 'n', [1, 1, 1], 0.7).forEach(add);
   blockText('MACHINE GUNS', x0 + 0.07, 3.55, 40, 0.36, 'e', [1, 1, 1], 0.7).forEach(add);
-  blockText('SIDEARMS', x1 - 0.07, 2.55, 41.2, 0.26, 'w', [1, 1, 1], 0.7).forEach(add);
+  blockText('SIDEARMS', x1 - 0.07, 2.55, 41.6, 0.26, 'w', [1, 1, 1], 0.7).forEach(add);
   blockText('GUNSMITH', 0, 3.55, z1 - 0.07, 0.3, 'n', [1, 0.8, 0.2], 0.8).forEach(add);
   // ammo station by the door: shelves of cans and a lit sign
   const ax = x1 - 0.45, az = 35.4;

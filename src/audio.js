@@ -116,6 +116,24 @@ export class Sounds {
     this.tone(140, 420, 0.5, 0.07, 'sawtooth'); this.burst(0.5, 700, 0.05, 'bandpass', 2);
     setTimeout(() => { this.tone(180, 60, 0.18, 0.3); this.click(900, 0.3, 2); this.burst(0.12, 2500, 0.12, 'highpass'); }, 600);
   }
+  // melee: the whoosh of the swing, the thud of a hit, the clang off a wall
+  swing(style) {
+    const d = style === 'smash' ? 0.32 : style === 'slash' ? 0.22 : 0.12;
+    this.burst(d, style === 'smash' ? 500 : 1400, 0.22, 'bandpass', 1.5);
+    this.tone(style === 'smash' ? 180 : 420, style === 'smash' ? 90 : 220, d, 0.05);
+  }
+  meleeHit(style) {
+    this.burst(0.09, style === 'slash' ? 2600 : 700, 0.45, 'lowpass', 1); this.tone(style === 'smash' ? 90 : 160, 50, 0.16, 0.45);
+    if (style === 'slash') this.burst(0.18, 5000, 0.12, 'highpass');
+  }
+  meleeWall(style) { this.burst(0.06, 3200, 0.3, 'bandpass', 4); this.tone(style === 'smash' ? 140 : 900, style === 'smash' ? 60 : 700, 0.12, 0.2, 'triangle'); }
+  // zombies: a groan somewhere nearby, the slap of a swipe, and the siren at the start of a round
+  groan(dist = 10, pan = 0) {
+    const g = Math.max(0.04, 0.22 / (1 + dist * 0.12)), o = { pan, wet: 0.4 }, f = 90 + Math.random() * 60;
+    this.tone(f, f * 0.7, 0.9, g, 'sawtooth', o); this.tone(f * 1.5, f * 1.1, 0.8, g * 0.4, 'sawtooth', o); this.burst(0.8, 500, g * 0.5, 'bandpass', 3, o);
+  }
+  zombieHit(dist = 2) { const g = Math.max(0.05, 0.35 / (1 + dist * 0.2)); this.burst(0.08, 900, g, 'lowpass', 1); this.tone(140, 70, 0.1, g); }
+  roundStart() { this.tone(300, 600, 0.6, 0.12, 'sawtooth', { wet: 0.6 }); setTimeout(() => this.tone(600, 300, 0.7, 0.12, 'sawtooth', { wet: 0.6 }), 600); this.tone(55, 45, 1.4, 0.25); }
   pickup() { this.tone(600, 1200, 0.12, 0.12, 'triangle'); this.click(2600, 0.25); }
   slide() { this.burst(0.55, 900, 0.22); this.burst(0.3, 3000, 0.06, 'highpass'); }
   vault() { this.burst(0.14, 800, 0.2); this.click(1100, 0.14, 2); setTimeout(() => this.burst(0.2, 1600, 0.08), 90); }

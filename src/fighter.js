@@ -62,6 +62,16 @@ function livePose(bot, dyingT, td) {
     return [side * 0.13 + md[0] * s * 0.34 * g, 0.05 + Math.max(0, c) * 0.16 * g, md[1] * s * 0.34 * g + (side > 0 ? -0.05 : 0.06) * (1 - g)];
   });
   // the gun: shouldered, pointing where they aim; the hands go to its grips
+  if (bot.zombie) {
+    // a zombie: hunched, lurching, arms reaching out in front; a swipe throws them forward
+    const lg = bot.lunge || 0, sway = Math.sin(w * 0.5) * 0.12 * g;
+    p.lean = 0.32 + lg * 0.35 - flinch * 0.4; p.twist = sway; p.head = [0.35 + sway, -0.15];
+    p.pelvis = [sway * 0.3, pelvisY - 0.04, 0];
+    p.hands = [[-0.2 + Math.sin(w) * 0.05, 1.32 + lg * 0.1, -0.5 - lg * 0.25], [0.2 - Math.sin(w) * 0.05, 1.36 + lg * 0.1, -0.52 - lg * 0.25]];
+    p.armHint = [[-0.6, -0.8, 0.2], [0.6, -0.8, 0.2]];
+    p.mouth = 0.6 + 0.3 * Math.sin((bot.breath || 0) * 3);
+    return p;
+  }
   p.gun = { c: [0.13, 1.43 - crouch - bob * 0.5 + recoil * 0.012 - flinch * 0.1, -0.2 + recoil * 0.05 + flinch * 0.06], rx: pitch + recoil * 0.05 - flinch * 0.4, ry: flinch * ft * 0.5 };
   p.holdGun = true;
   p.hands = [[-0.08, 1.36 - crouch, -0.5], [0.16, 1.34 - crouch, -0.14]];

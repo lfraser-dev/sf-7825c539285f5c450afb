@@ -103,9 +103,9 @@ const KEY = 'semifinals.loadout';
 export function loadLoadout() {
   const def = {
     cls: 'medium',
-    light: { weapon: 'smg', sidearm: 'pistol', ability: 'grapple', heavy: 'dronepod', throwable: 'flash', takedown: 'blade' },
-    medium: { weapon: 'ar', sidearm: 'pistol', ability: 'pad', heavy: 'gl_frag', throwable: 'smoke', takedown: 'buttstroke' },
-    heavy: { weapon: 'lmg', sidearm: 'revolver', ability: 'barricade', heavy: 'turret_mg', throwable: 'frag', takedown: 'stomp' },
+    light: { weapon: 'smg', sidearm: 'pistol', ability: 'grapple', heavy: 'dronepod', throwable: 'flash', takedown: 'blade', melee: 'knife' },
+    medium: { weapon: 'ar', sidearm: 'pistol', ability: 'pad', heavy: 'gl_frag', throwable: 'smoke', takedown: 'buttstroke', melee: 'katana' },
+    heavy: { weapon: 'lmg', sidearm: 'revolver', ability: 'barricade', heavy: 'turret_mg', throwable: 'frag', takedown: 'stomp', melee: 'hammer' },
   };
   try {
     const s = JSON.parse(localStorage.getItem(KEY) || 'null');
@@ -117,6 +117,7 @@ export function loadLoadout() {
         if (s[c] && CLASSES[c].heavies.includes(s[c].heavy)) def[c].heavy = s[c].heavy;
         if (s[c] && THROWABLES[s[c].throwable]) def[c].throwable = s[c].throwable;
         if (s[c] && TAKEDOWNS[s[c].takedown]?.cls === c) def[c].takedown = s[c].takedown;
+        if (s[c] && ['knife', 'katana', 'hammer'].includes(s[c].melee)) def[c].melee = s[c].melee;
       }
       def.cls = s.cls;
     }

@@ -10,6 +10,7 @@
 import { ropeParts, hookParts } from './gadgets.js';
 import { Bot, teamPalette, lookPalette } from './bots.js';
 import { badgeHTML } from './progress.js';
+import { divHTML, crewHTML, cleanTag } from './social.js';
 import { compose, mat4 } from './math.js';
 import { TEAM_NAMES } from './matchmaking.js';
 import { CLASSES } from './classes.js';
@@ -362,11 +363,13 @@ function cleanMe(m) {
   const col = (c) => (Array.isArray(c) && c.length === 3 && c.every((v) => Number.isFinite(v)) ? c.map((v) => Math.max(0, Math.min(1, v))) : null);
   const L = m.look && typeof m.look === 'object' ? m.look : null;
   const look = L ? { m: col(L.m), h: col(L.h), b: col(L.b), s: col(L.s), g: col(L.g), w: String(L.w || '').slice(0, 16), sk: String(L.sk || '').slice(0, 24), a: L.a && typeof L.a === 'object' ? L.a : {}, eq: L.eq && typeof L.eq === 'object' ? Object.fromEntries(Object.entries(L.eq).slice(0, 16).map(([k, v]) => [String(k).slice(0, 12), String(v).slice(0, 24)])) : null, fx: L.fx >= 40 && L.fx <= 52 ? Math.floor(L.fx) : 0 } : null;
-  return { lv, look };
+  const rk = Number.isFinite(+m.rk) ? Math.max(0, Math.min(99999, Math.floor(+m.rk))) : 0;
+  const cr = m.cr && typeof m.cr === 'object' && cleanTag(m.cr.t).length >= 2 ? { t: cleanTag(m.cr.t), c: /^#[0-9a-f]{6}$/i.test(m.cr.c) ? m.cr.c : '#ff4a40' } : null;
+  return { lv, look, rk, cr };
 }
 class Remote {
   constructor(world, info, team, g = null) {
-    Object.assign(this, { world, id: info.id, name: info.name, cls: info.cls, team, isPlayer: false, isRemote: true, lv: info.bot ? 0 : info.lv || 1, look: info.look || null, g });
+    Object.assign(this, { world, id: info.id, name: info.name, cls: info.cls, team, isPlayer: false, isRemote: true, lv: info.bot ? 0 : info.lv || 1, look: info.look || null, cr: info.cr || null, g });
     this.target = null; this.bot = null; this.dead = false;
     this.hp = 1; this.maxHp = 1; this.wep = null;
   }
@@ -571,7 +574,7 @@ export class Online {
   }
 
   // my level and look (outfit colours, gun, attachments, skin), from the game
-  me() { const x = this.ui.getMe?.(); return x ? { lv: x.lv, look: x.look } : {}; }
+  me() { const x = this.ui.getMe?.(); return x ? { lv: x.lv, look: x.look, rk: x.rk, cr: x.cr } : {}; }
   // tell the room if my class, loadout or outfit changed while waiting
   refreshMe() {
     if (!this.inRoom || this.active) return;
@@ -903,7 +906,7 @@ export class Lobby {
           for (const p of l.players.filter((q) => q.team === k)) {
             const row = el('div', `nt-p${p.id === on.myId ? ' me' : ''}`);
             const nm = el('span', null, p.name + (p.id === on.myId ? ' (YOU)' : ''));
-            if (!p.bot) nm.insertAdjacentHTML('afterbegin', badgeHTML(p.lv || 1) + ' ');
+            if (!p.bot) nm.insertAdjacentHTML('afterbegin', badgeHTML(p.lv || 1) + ' ' + divHTML(p.rk || 0) + ' ' + crewHTML(p.cr) + (p.cr ? ' ' : ''));
             row.append(nm, el('i', null, CLASSES[p.cls]?.name || ''));
             if (on.isHost && l.max > 2) row.append(btn('nt-swap', '⇄', () => on.swapTeam(p.id)));
             t.append(row);

@@ -167,7 +167,7 @@ export class Weapon {
     this.slideT += ((player.sliding ? 1 : 0) - this.slideT) * damp(9, dt);
     this.player = player;
 
-    if (input.hit('KeyR')) this.startReload(ctx);
+    if (input.hit('KeyR') && !d.melee) this.startReload(ctx);
     this.updateReload(dt, ctx);
     this.updateCycle(dt, ctx);
 
@@ -242,7 +242,7 @@ export class Weapon {
     this.queued = 0;
     this.cool = Math.max(this.cool, 0) + 60 / d.rpm;
     if (d.burst) { this.burstLeft--; if (this.burstLeft <= 0) this.cool += d.burstGap; }
-    this.ammo--;
+    if (!d.melee) this.ammo--;
     this.sinceShot = 0;
     this.chargeT = 0;
     ctx.fire(this);
@@ -772,6 +772,21 @@ export class Weapon {
         + dt_ * 0.35 + gt * 0.25,
     ];
     rot[0] += fl[3]; rot[1] += fl[4]; rot[2] += fl[5];
+    if (d.melee) {
+      // melee: held low and ready; a swing plays out over the weapon's swing time
+      const M = d.melee, k = Math.min(1, this.sinceShot / M.swing), on = this.sinceShot < M.swing;
+      const wind = on ? Math.min(1, k / 0.22) : 0, strike = on ? Math.min(1, Math.max(0, (k - 0.22) / 0.25)) : 0, back = on ? Math.max(0, (k - 0.55) / 0.45) : 1;
+      const e = (x) => x * x * (3 - 2 * x), ws = e(wind) * (1 - e(back)), ss = e(strike) * (1 - e(back));
+      if (M.style === 'stab') {          // knife: pull back, then a fast straight stab
+        pos[2] += ws * 0.08 - ss * 0.24; pos[1] += ss * 0.03; pos[0] -= ss * 0.06; rot[0] += ws * 0.25 - ss * 0.15; rot[2] -= ss * 0.3;
+      } else if (M.style === 'slash') {  // katana: raised over the right shoulder, then a sweep across the screen
+        pos[0] += ws * 0.12 - ss * 0.46; pos[1] += ws * 0.16 - ss * 0.12; pos[2] -= ss * 0.12;
+        rot[1] += ws * 0.9 - ss * 1.9; rot[2] += ws * 0.6 - ss * 1.4; rot[0] += ws * 0.5 - ss * 0.4;
+      } else {                           // hammer: hauled up overhead, then brought straight down
+        pos[1] += ws * 0.28 - ss * 0.32; pos[2] += ws * 0.12 - ss * 0.22; pos[0] -= ss * 0.08;
+        rot[0] += ws * 1.6 - ss * 2.4;
+      }
+    }
     if (ch > 0) {
       // charging: the gun shudders harder and harder and gets pulled in tight
       const j = ch * ch * 0.0035;

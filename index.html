@@ -705,6 +705,29 @@ body:has(#matchend:not(.hidden)) .mm-page { visibility: hidden; }
   #killcam .kc-who { position: absolute; left: 50%; top: calc(9vh + 60px); transform: translateX(-50%); font: 800 16px var(--font); letter-spacing: .12em; color: #fff; text-shadow: 0 2px 6px #000; }
   #killcam .kc-skip { position: absolute; right: 24px; bottom: calc(9vh + 16px); font: 700 13px var(--font); letter-spacing: .08em; color: #fff; opacity: .8; }
   #killcam .kc-skip kbd { background: #fff; color: #111; font: 800 12px var(--font); padding: 1px 6px; margin-right: 4px; }
+  .mm-modes { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; } .mm-modes .mm-card span { font-size: 10px; }
+  .mm-modes .mm-card i { display: none; } .mm-modes .mm-card b { font-size: clamp(22px, 2.6vw, 34px); line-height: 1; }
+  @media (max-width: 1500px) { .mm-ranked small { display: none; } .mm-ranked { padding: 4px 8px; } }
+  #mm-zombies { --c: #9fe06a; } #mm-royale { --c: #4aa8ff; }
+  #prompt span.no { color: #ff5a3a; }
+  /* ranked divisions and crews */
+  .dv { display: inline-flex; align-items: center; justify-content: center; min-width: 20px; height: 20px; padding: 0 3px; background: var(--dv); color: #111; font: 900 12px var(--font);
+    clip-path: polygon(50% 0, 100% 18%, 100% 70%, 50% 100%, 0 70%, 0 18%); vertical-align: middle; }
+  .dv small { font-size: 8px; margin-left: 1px; }
+  .crew { color: var(--cw); font-weight: 900; letter-spacing: .04em; }
+  .mm-ranked { display: flex; align-items: center; gap: 8px; background: rgba(0,0,0,.35); border: 0; color: #fff; padding: 6px 10px; cursor: pointer; text-align: left; font-family: var(--font); }
+  .mm-ranked .dv { width: 28px; height: 30px; font-size: 15px; }
+  .mm-ranked b { display: block; font: 900 italic 13px var(--font); letter-spacing: .06em; } .mm-ranked small { font: 700 10px var(--font); letter-spacing: .08em; opacity: .75; }
+  .me-rk { display: flex; align-items: center; gap: 8px; margin: 8px 0; font: 800 13px var(--font); letter-spacing: .06em; }
+  .me-rk span.up { color: #7dff9a; } .me-rk span.down { color: #ff5a3a; } .me-rk em { color: #ffd04a; font-style: normal; animation: gtblink .4s steps(2) 6; }
+  #crew-box { position: fixed; inset: 0; z-index: 70; display: flex; align-items: center; justify-content: center; background: rgba(5,8,14,.75); font-family: var(--font); }
+  .cw-card { width: min(380px, 92vw); background: #141a26; border-left: 4px solid var(--red); padding: 20px; color: #fff; }
+  .cw-card h3 { margin: 0 0 6px; font: 900 italic 22px var(--font); } .cw-card p { font-size: 13px; opacity: .75; margin: 0 0 12px; }
+  .cw-card label { display: block; font: 800 11px var(--font); letter-spacing: .12em; opacity: .9; margin-bottom: 10px; }
+  .cw-card input { display: block; width: 100%; box-sizing: border-box; margin-top: 4px; padding: 9px; font: 800 16px var(--font); letter-spacing: .08em; text-transform: uppercase; background: #0b0f17; color: #fff; border: 1px solid #39435a; }
+  .cw-cols { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 10px; } .cw-cols button { width: 26px; height: 26px; border: 2px solid transparent; cursor: pointer; } .cw-cols button.on { border-color: #fff; }
+  .cw-prev { font: 700 12px var(--font); letter-spacing: .06em; min-height: 18px; margin-bottom: 12px; opacity: .9; }
+  .cw-btns { display: flex; gap: 8px; } .cw-btns button { flex: 1; padding: 9px; font: 800 13px var(--font); border: 0; cursor: pointer; background: var(--red); color: #fff; } .cw-btns button.alt { background: #2a3244; }
   /* battle pass */
   #menu[data-screen="pass"] { background: linear-gradient(90deg, rgba(8,8,10,.94), rgba(20,8,10,.9)); }
   #menu[data-screen="pass"] .mm-name { display: none; }
@@ -816,7 +839,7 @@ body:has(#matchend:not(.hidden)) .mm-page { visibility: hidden; }
   <div id="markers" class="hidden"></div>
   <div id="tags" class="hidden"></div>
   <div id="mapname"><div class="small">THE SEMI-FINALS</div><div class="big">TEST RANGE</div></div>
-  <div id="slots"><div id="slot1"></div><div id="slot2"></div></div>
+  <div id="slots"><div id="slot1"></div><div id="slot2"></div><div id="slot3"></div></div>
   <div id="weapontype"></div>
   <div id="weaponname"></div>
   <div class="panel" id="ammobox"><span id="ammo">30</span><span id="reserve">/ ∞</span></div>
@@ -847,7 +870,7 @@ body:has(#matchend:not(.hidden)) .mm-page { visibility: hidden; }
 
   <section class="mm-page mm-home" data-page="home">
     <div class="mm-col mm-home-left">
-      <div class="mm-kicker">SEASON 1 · BUILD 0.67</div>
+      <div class="mm-kicker">SEASON 1 · BUILD 0.68</div>
       <button class="mm-big" id="mm-play" type="button">
         <span class="mm-big-t">PLAY</span>
         <span class="mm-big-s" id="mm-play-sub">SEMI-FINALS · FIND A MATCH</span>
@@ -855,6 +878,10 @@ body:has(#matchend:not(.hidden)) .mm-page { visibility: hidden; }
       <button class="mm-card mm-range" id="play" type="button">
         <b>TEST RANGE</b><span id="mm-range-sub">GUNS · MOVEMENT · PARKOUR · BOTS</span><i>▶</i>
       </button>
+      <div class="mm-modes">
+        <button class="mm-card mm-range mm-mode" id="mm-zombies" type="button"><b>ZOMBIES</b><span>SURVIVE THE WAVES · BUY GUNS</span><i>▶</i></button>
+        <button class="mm-card mm-range mm-mode" id="mm-royale" type="button"><b>BATTLE ROYALE</b><span>8 PLAYERS · LOOT · THE RING</span><i>▶</i></button>
+      </div>
       <button class="mm-card mm-range mm-online" id="mm-online" type="button">
         <b>ONLINE</b><span>1V1 · 2V2 · PLAY WITH FRIENDS</span><i>▶</i>
       </button>
@@ -875,6 +902,8 @@ body:has(#matchend:not(.hidden)) .mm-page { visibility: hidden; }
       <div class="mm-weapons" id="mm-weapons"></div>
       <h4>SIDEARM</h4>
       <div class="mm-weapons mm-sidearms" id="mm-sidearms"></div>
+      <h4>MELEE <span class="mm-key">3</span> <span class="mm-key">X</span></h4>
+      <div class="mm-weapons mm-sidearms" id="mm-melee"></div>
       <h4>ABILITY <span class="mm-key">G</span></h4>
       <div class="mm-abilities" id="mm-abilities"></div>
       <h4>HEAVY WEAPON <span class="mm-key">Q</span></h4>
@@ -971,44 +1000,46 @@ body:has(#matchend:not(.hidden)) .mm-page { visibility: hidden; }
 <script type="importmap">
 {
  "imports": {
-  "./src/attachments.js": "./src/attachments.js?v=0.67-1794934254",
-  "./src/audio.js": "./src/audio.js?v=0.67-1794934254",
-  "./src/batch.js": "./src/batch.js?v=0.67-1794934254",
-  "./src/bench.js": "./src/bench.js?v=0.67-1794934254",
-  "./src/bots.js": "./src/bots.js?v=0.67-1794934254",
-  "./src/challenges.js": "./src/challenges.js?v=0.67-1794934254",
-  "./src/classes.js": "./src/classes.js?v=0.67-1794934254",
-  "./src/contestant.js": "./src/contestant.js?v=0.67-1794934254",
-  "./src/cosmetics.js": "./src/cosmetics.js?v=0.67-1794934254",
-  "./src/course.js": "./src/course.js?v=0.67-1794934254",
-  "./src/effects.js": "./src/effects.js?v=0.67-1794934254",
-  "./src/elevator.js": "./src/elevator.js?v=0.67-1794934254",
-  "./src/fighter.js": "./src/fighter.js?v=0.67-1794934254",
-  "./src/gadgets.js": "./src/gadgets.js?v=0.67-1794934254",
-  "./src/heavy.js": "./src/heavy.js?v=0.67-1794934254",
-  "./src/input.js": "./src/input.js?v=0.67-1794934254",
-  "./src/main.js": "./src/main.js?v=0.67-1794934254",
-  "./src/maps/arenas.js": "./src/maps/arenas.js?v=0.67-1794934254",
-  "./src/maps/testRange.js": "./src/maps/testRange.js?v=0.67-1794934254",
-  "./src/matchmaking.js": "./src/matchmaking.js?v=0.67-1794934254",
-  "./src/math.js": "./src/math.js?v=0.67-1794934254",
-  "./src/nav.js": "./src/nav.js?v=0.67-1794934254",
-  "./src/net.js": "./src/net.js?v=0.67-1794934254",
-  "./src/pass.js": "./src/pass.js?v=0.67-1794934254",
-  "./src/player.js": "./src/player.js?v=0.67-1794934254",
-  "./src/progress.js": "./src/progress.js?v=0.67-1794934254",
-  "./src/props.js": "./src/props.js?v=0.67-1794934254",
-  "./src/renderer.js": "./src/renderer.js?v=0.67-1794934254",
-  "./src/rig.js": "./src/rig.js?v=0.67-1794934254",
-  "./src/takedown.js": "./src/takedown.js?v=0.67-1794934254",
-  "./src/tdm.js": "./src/tdm.js?v=0.67-1794934254",
-  "./src/thumbs.js": "./src/thumbs.js?v=0.67-1794934254",
-  "./src/weapon.js": "./src/weapon.js?v=0.67-1794934254",
-  "./src/weapons.js": "./src/weapons.js?v=0.67-1794934254",
-  "./src/world.js": "./src/world.js?v=0.67-1794934254"
+  "./src/attachments.js": "./src/attachments.js?v=0.68-1794994744",
+  "./src/audio.js": "./src/audio.js?v=0.68-1794994744",
+  "./src/batch.js": "./src/batch.js?v=0.68-1794994744",
+  "./src/bench.js": "./src/bench.js?v=0.68-1794994744",
+  "./src/bots.js": "./src/bots.js?v=0.68-1794994744",
+  "./src/challenges.js": "./src/challenges.js?v=0.68-1794994744",
+  "./src/classes.js": "./src/classes.js?v=0.68-1794994744",
+  "./src/contestant.js": "./src/contestant.js?v=0.68-1794994744",
+  "./src/cosmetics.js": "./src/cosmetics.js?v=0.68-1794994744",
+  "./src/course.js": "./src/course.js?v=0.68-1794994744",
+  "./src/effects.js": "./src/effects.js?v=0.68-1794994744",
+  "./src/elevator.js": "./src/elevator.js?v=0.68-1794994744",
+  "./src/fighter.js": "./src/fighter.js?v=0.68-1794994744",
+  "./src/gadgets.js": "./src/gadgets.js?v=0.68-1794994744",
+  "./src/heavy.js": "./src/heavy.js?v=0.68-1794994744",
+  "./src/input.js": "./src/input.js?v=0.68-1794994744",
+  "./src/main.js": "./src/main.js?v=0.68-1794994744",
+  "./src/maps/arenas.js": "./src/maps/arenas.js?v=0.68-1794994744",
+  "./src/maps/testRange.js": "./src/maps/testRange.js?v=0.68-1794994744",
+  "./src/matchmaking.js": "./src/matchmaking.js?v=0.68-1794994744",
+  "./src/math.js": "./src/math.js?v=0.68-1794994744",
+  "./src/modes.js": "./src/modes.js?v=0.68-1794994744",
+  "./src/nav.js": "./src/nav.js?v=0.68-1794994744",
+  "./src/net.js": "./src/net.js?v=0.68-1794994744",
+  "./src/pass.js": "./src/pass.js?v=0.68-1794994744",
+  "./src/player.js": "./src/player.js?v=0.68-1794994744",
+  "./src/progress.js": "./src/progress.js?v=0.68-1794994744",
+  "./src/props.js": "./src/props.js?v=0.68-1794994744",
+  "./src/renderer.js": "./src/renderer.js?v=0.68-1794994744",
+  "./src/rig.js": "./src/rig.js?v=0.68-1794994744",
+  "./src/social.js": "./src/social.js?v=0.68-1794994744",
+  "./src/takedown.js": "./src/takedown.js?v=0.68-1794994744",
+  "./src/tdm.js": "./src/tdm.js?v=0.68-1794994744",
+  "./src/thumbs.js": "./src/thumbs.js?v=0.68-1794994744",
+  "./src/weapon.js": "./src/weapon.js?v=0.68-1794994744",
+  "./src/weapons.js": "./src/weapons.js?v=0.68-1794994744",
+  "./src/world.js": "./src/world.js?v=0.68-1794994744"
  }
 }
 </script>
-<script type="module" src="src/main.js?v=0.67-1794934254"></script>
+<script type="module" src="src/main.js?v=0.68-1794994744"></script>
 </body>
 </html>

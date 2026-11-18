@@ -1386,6 +1386,47 @@ const BALANCE = {
 };
 for (const [id, b] of Object.entries(BALANCE)) Object.assign(WEAPONS[id], b);
 
+// ---------------------------------------------------------------- melee (build 0.68): slot 3
+// Swung, not fired: `melee` holds the damage, reach, how wide the swing catches people (arc, radians either side),
+// the swing time, how far it lunges you at someone in front of you, and how many it can hit in one swing.
+const STEELB = [0.72, 0.74, 0.78], DARKM = [0.1, 0.1, 0.11];
+const melee = (id, name, parts, M, extra = {}) => {
+  WEAPONS[id] = { id, name, type: 'MELEE', oneHanded: true, auto: true, rpm: Math.round(60 / M.swing), mag: 1, dmg: M.dmg, headMult: 1.5, pellets: 1,
+    reload: 1, reloadEmpty: 1, spread: { base: 0, move: 0, air: 0, bloom: 0, bloomMax: 0, ads: 1 }, recoil: { up: 0, side: 0, vm: 0 }, adsZoom: 1, adsSpeed: 12,
+    sightY: 0.05, adsZ: -0.4, hip: [0.2, -0.2, -0.38], muzzle: [0, 0, -0.3], grip: [0, 0, 0.05], foreGrip: [0, 0, 0.05], eject: [0, 0, 0], magPos: [0, 0, 0], bolt: [0, 0, 0],
+    sound: { freq: 900, thump: 90, gain: 0.25 }, melee: M, parts, flashScale: 0, ...extra };
+};
+melee('knife', 'COMBAT KNIFE', [
+  { name: 'grip', c: [0, 0, 0.05], s: [0.026, 0.032, 0.11], col: DARKM, m: 'rubber' },
+  { name: 'pommel', c: [0, 0, 0.108], s: [0.03, 0.036, 0.012], col: STEELB, m: 'steel' },
+  { name: 'guard', c: [0, 0, -0.008], s: [0.022, 0.06, 0.012], col: STEELB, m: 'steel' },
+  { name: 'blade', c: [0, 0.006, -0.09], s: [0.006, 0.032, 0.16], col: [0.8, 0.82, 0.86], m: 'steel' },
+  { name: 'edge', c: [0, -0.011, -0.092], s: [0.0065, 0.004, 0.15], col: [0.95, 0.96, 0.98], m: 'steel' },
+  { name: 'tip', c: [0, 0.0, -0.18], s: [0.005, 0.018, 0.03], col: [0.85, 0.86, 0.9], m: 'steel' },
+], { dmg: 55, range: 2.1, arc: 0.32, swing: 0.36, lunge: 5, hits: 1, style: 'stab' }, { moveMul: 1.12 });
+melee('katana', 'KATANA', [
+  { name: 'grip', c: [0, 0, 0.06], s: [0.03, 0.034, 0.22], col: [0.08, 0.06, 0.06], m: 'cloth' },
+  { name: 'wrap', c: [0, 0, 0.06], s: [0.032, 0.02, 0.2], col: [0.75, 0.12, 0.1], m: 'cloth' },
+  { name: 'tsuba', c: [0, 0, -0.06], s: [0.075, 0.075, 0.01], col: [0.7, 0.55, 0.2], m: 'brass', shape: 'cyl' },
+  { name: 'blade', c: [0, 0.004, -0.42], s: [0.008, 0.03, 0.7], col: [0.82, 0.84, 0.88], m: 'steel' },
+  { name: 'edge', c: [0, -0.011, -0.42], s: [0.0085, 0.006, 0.7], col: [0.97, 0.98, 1], m: 'steel', em: 0.15 },
+  { name: 'tip', c: [0, -0.002, -0.79], s: [0.007, 0.022, 0.05], col: [0.9, 0.92, 0.95], m: 'steel' },
+], { dmg: 75, range: 2.7, arc: 0.62, swing: 0.52, lunge: 4, hits: 2, style: 'slash' }, { moveMul: 1.06 });
+melee('hammer', 'SLEDGEHAMMER', [
+  { name: 'shaft', c: [0, 0, -0.12], s: [0.034, 0.034, 0.62], col: [0.5, 0.36, 0.22], m: 'wood' },
+  { name: 'grip', c: [0, 0, 0.08], s: [0.04, 0.04, 0.16], col: DARKM, m: 'rubber' },
+  { name: 'head', c: [0, 0, -0.44], s: [0.2, 0.095, 0.095], col: [0.3, 0.31, 0.34], m: 'steel' },
+  { name: 'face', c: [0.102, 0, -0.44], s: [0.006, 0.1, 0.1], col: [0.7, 0.72, 0.76], m: 'steel' },
+  { name: 'face2', c: [-0.102, 0, -0.44], s: [0.006, 0.1, 0.1], col: [0.7, 0.72, 0.76], m: 'steel' },
+  { name: 'band', c: [0, 0, -0.44], s: [0.205, 0.1, 0.02], col: [0.92, 0.1, 0.08], m: 'paint' },
+], { dmg: 120, range: 2.4, arc: 0.4, swing: 0.95, lunge: 2.5, hits: 1, style: 'smash', walls: 220 }, { moveMul: 0.96 });
+export const MELEE = ['knife', 'katana', 'hammer'];
+export const MELEE_DESC = {
+  knife: 'Quick stabs that lunge you at whoever is in front of you. Two hits, or one in the head.',
+  katana: 'A wide slash that can cut two people at once. Long reach.',
+  hammer: 'Slow, but one swing drops anyone, and it smashes through walls.',
+};
+
 // what each gun is, in a line (the armoury's info card)
 export const GUN_DESC = {
   ar: 'The all-rounder. Steady full auto that works at almost any range.',

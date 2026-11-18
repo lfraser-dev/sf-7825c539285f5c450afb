@@ -331,6 +331,7 @@ function surfaces(def) {
 
 // ---------------------------------------------------------------- build
 export function buildDef(base, loadout = {}) {
+  if (base.melee) return { ...base, parts: base.parts.map((p) => ({ ...p })), range: base.melee.range, flashScale: 0, hipSpread: 1, loadout: {} };   // melee: no attachments
   const id = base.id, style = styleOf(id), m = MOUNT[id] || MOUNT[style];
   const def = {
     ...base,

@@ -38,6 +38,10 @@ export function meleePose(M, T, n, equipT = 1) {
   const p = [0, 0, 0], r = [0, 0, 0];
   const add = (w, P, R) => { for (let k = 0; k < 3; k++) { p[k] += P[k] * w; r[k] += R[k] * w; } };
   // at rest: a slow sway, and on the draw a flourish (the knife flips over, the katana is drawn across, the hammer hefted)
+  // the resting hold: the wrist bent forward so the blade leans out ahead of the fist; the sledge up at an angle
+  if (M.style === 'stab') add(1, [0, 0.01, 0], [-0.62, 0.12, 0.1]);
+  else if (M.style === 'slash') add(1, [0, 0.02, 0], [-0.6, 0.08, 0.15]);
+  else add(1, [0.02, -0.06, 0.02], [-0.45, 0.12, 0.22]);
   const dr = 1 - ease(equipT / 0.55);
   if (dr > 0) {
     if (M.style === 'stab') add(dr, [0.04, -0.06, 0.04], [Math.sin(dr * Math.PI) * 2.6 + dr * 0.4, 0, 0.3]);
@@ -53,27 +57,27 @@ export function meleePose(M, T, n, equipT = 1) {
   if (M.style === 'stab') {
     if (alt > 0) {          // a straight, fast stab from the hip: arm cocked back, blade turned, punched forward
       add(wind, [0.05, -0.04, 0.14], [0.45, 0.2, 0.55]);
-      add(hit, [-0.1, 0.06, -0.38], [-0.25, -0.12, -0.5]);
+      add(hit, [-0.1, 0.08, -0.36], [0.3, -0.12, -0.5]);
       add(over, [-0.02, 0, -0.08], [0, 0, -0.25]);
     } else {                // a backhand slash right to left, wrist rolling over
       add(wind, [0.16, 0.06, 0.03], [0.15, 1.05, 0.8]);
-      add(hit, [-0.34, 0.0, -0.15], [-0.15, -1.5, -0.95]);
+      add(hit, [-0.3, 0.02, -0.15], [0.15, -1.2, -0.85]);
       add(over, [-0.07, -0.03, 0], [0, -0.35, -0.3]);
     }
   } else if (M.style === 'slash') {
     if (alt > 0) {          // over the right shoulder, cutting down and across to the left
       add(wind, [0.2, 0.24, 0.1], [0.7, 1.05, 0.9]);
-      add(hit, [-0.55, -0.16, -0.16], [-0.5, -2.1, -1.6]);
+      add(hit, [-0.22, -0.06, -0.16], [-0.15, -1.1, -1.1]);
       add(over, [-0.1, -0.05, 0], [-0.12, -0.4, -0.3]);
     } else {                // a rising backhand from low on the left, up and away to the right
       add(wind, [-0.25, -0.14, 0.07], [-0.4, -1.0, -1.35]);
-      add(hit, [0.46, 0.22, -0.16], [0.4, 1.85, 1.2]);
+      add(hit, [0.36, 0.16, -0.16], [0.35, 1.35, 1.0]);
       add(over, [0.1, 0.05, 0], [0.12, 0.35, 0.25]);
     }
   } else {                  // the hammer: hauled up overhead, then down with everything you've got (it bounces off)
     const side = alt * 0.06;
-    add(wind, [side, 0.34, 0.16], [1.9, alt * 0.18, alt * 0.25]);
-    add(hit, [-side - 0.06, -0.38, -0.26], [-2.65, -alt * 0.1, -alt * 0.15]);
+    add(wind, [side, 0.14, 0.02], [0.75, alt * 0.15, alt * 0.2]);
+    add(hit, [-side - 0.04, -0.2, -0.24], [-1.55, -alt * 0.1 - 0.1, -alt * 0.15 - 0.15]);
     add(over, [0, 0.07, 0], [0.5, 0, 0]);
   }
   add(settle, [0, 0.4, 0], [1, 0, 0.6]);
@@ -1033,13 +1037,13 @@ export class Weapon {
     // grip hand: palm against the right of the pistol grip, fingers wrapped round the front, index on the trigger,
     // thumb over the top on the far side
     const gripPart = d.parts.find((q) => q.name === 'grip' && !q.hidden);
-    const gRx = gripPart ? gripPart.rx || 0 : -0.3;
+    const gRx = d.gripRx ?? (gripPart ? gripPart.rx || 0 : -0.3);
     const gw = gripPart ? gripPart.s[0] / 2 : 0.022;
     let RH;
     {
       const az = norm3(rotX([0, 0.12, -1], gRx)), ay = [1, 0, 0], ax = cross3(ay, az);
       const o = add3(right, rotX([gw + 0.013, -0.004, 0.024], gRx));
-      const GRIP = { f: [[0.2, 0.45, 0.35, 0.05], [1.45, 1.35, 0.85], [1.5, 1.4, 0.85], [1.5, 1.38, 0.8, -0.05]],
+      const GRIP = { f: [d.melee ? [1.4, 1.35, 0.85, 0.03] : [0.2, 0.45, 0.35, 0.05], [1.45, 1.35, 0.85], [1.5, 1.4, 0.85], [1.5, 1.38, 0.8, -0.05]],
         t: [[0.3, -0.85, 0.45], [0.05, -0.55, 0.85], [0, -0.3, 0.95]] };
       RH = drawHand(this.root, ax, ay, az, o, 1, GRIP);
       compose(this.tmp, o, [0, 0, 0], [1, 1, 1]);
@@ -1055,15 +1059,9 @@ export class Weapon {
       t: [[0.25, -0.8, 0.55], [0.3, -0.6, 0.75], [0.25, -0.35, 0.9]] };
     const FLAT = { f: [[0.12, 0.1, 0.06, 0.12], [0.1, 0.1, 0.06, 0.03], [0.1, 0.1, 0.06, -0.06], [0.12, 0.1, 0.06, -0.15]],
       t: [[0.8, -0.3, 0.5], [0.5, -0.1, 0.85], [0.3, 0, 0.95]] };
-    if (d.melee && !(plant && plant.t > 0.5)) {
-      // melee: the free hand is a loose fist up on the left, guarding; it pulls back as the blade swings out
-      const T = this.sinceShot / d.melee.swing, sw = T >= 0 && T < 1 ? Math.sin(Math.min(1, T / 0.6) * Math.PI) : 0;
-      const br = Math.sin(this.idleT || 0) * 0.004;
-      const I0 = this.identity || (this.identity = mat4());
-      const o = [-0.17 - sw * 0.05 + (this.sway?.[0] || 0) * 0.3, -0.155 + br - sw * 0.05 - (1 - Math.min(1, this.equipT / 0.5)) * 0.2, -0.36 + sw * 0.1];
-      const az = norm3([0.75, 0.25, -0.35]), ax0 = norm3([0.1, 0.35, 1]);
-      const ay = norm3(cross3(az, ax0)), ax = cross3(ay, az);
-      LH = drawHand(I0, ax, ay, az, o, -1, CLAMP);
+    if (d.melee && d.melee.style !== 'smash' && !(plant && plant.t > 0.5)) {
+      // a knife or a sword is held in one hand: the other one stays down out of sight
+      LH = null;
     } else if (plant && plant.t > 0.5) {
       // flat hand planted on a ledge / wall / button
       const onGunP = transformPoint(this.root, left);
@@ -1096,13 +1094,13 @@ export class Weapon {
 
     // forearms: one smooth tapered sleeve each, from the wrist to the elbow
     const xf = (M, v) => [0, 1, 2].map((i) => M[i] * v[0] + M[4 + i] * v[1] + M[8 + i] * v[2] + M[12 + i]);
-    const lv = xf(LH, [0, 0, -0.04]);     // wrists
+    const lv = LH ? xf(LH, [0, 0, -0.04]) : null;     // wrists
     const rv = xf(RH, [0, 0, -0.04]);
     let lShoulder = lerp3([-0.32, -0.62, 0.0], [-0.24, -0.55, 0.05], a);
     if (plant && plant.t > 0.001) lShoulder = lerp3(lShoulder, [-0.36, -0.68, -0.28], plant.t); // reach the arm out, away from the lens
     const rShoulder = lerp3([0.34, -0.5, 0.12], [0.16, -0.46, 0.18], a);
     const I = this.identity || (this.identity = mat4());
-    [[lv, lShoulder, true], [rv, rShoulder, false]].forEach(([hand, sh, isLeft]) => {
+    [[lv, lShoulder, true], [rv, rShoulder, false]].filter(([hand]) => hand).forEach(([hand, sh, isLeft]) => {
       const d0 = [sh[0] - hand[0], sh[1] - hand[1], sh[2] - hand[2]];
       const l0 = Math.hypot(...d0);
       const u = d0.map((v) => v / l0);

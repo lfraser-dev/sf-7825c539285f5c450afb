@@ -1390,10 +1390,16 @@ for (const [id, b] of Object.entries(BALANCE)) Object.assign(WEAPONS[id], b);
 // Swung, not fired: `melee` holds the damage, reach, how wide the swing catches people (arc, radians either side),
 // the swing time, how far it lunges you at someone in front of you, and how many it can hit in one swing.
 const STEELB = [0.72, 0.74, 0.78], DARKM = [0.1, 0.1, 0.11];
-const melee = (id, name, parts, M, extra = {}) => {
+// Modelled lying along -z, then stood up in the fist: everything turns about the grip by `tilt` (radians up), so the
+// handle runs the way a pistol grip does and the hand closes round it properly; the blade leans forward out of the fist.
+const melee = (id, name, parts0, M, extra = {}) => {
+  const t = M.tilt, piv = extra.grip || [0, 0, 0.05];
+  const rx = (v) => { const y = v[1] - piv[1], z = v[2] - piv[2]; return [v[0], piv[1] + y * Math.cos(t) - z * Math.sin(t), piv[2] + y * Math.sin(t) + z * Math.cos(t)]; };
+  const parts = parts0.map((p) => ({ ...p, c: rx(p.c), rx: (p.rx || 0) + t }));
+  extra = { ...extra, gripRx: t - Math.PI / 2, ...(extra.foreGrip ? { foreGrip: rx(extra.foreGrip) } : {}) };
   WEAPONS[id] = { id, name, type: 'MELEE', oneHanded: true, auto: true, rpm: Math.round(60 / M.swing), mag: 1, dmg: M.dmg, headMult: 1.5, pellets: 1,
     reload: 1, reloadEmpty: 1, spread: { base: 0, move: 0, air: 0, bloom: 0, bloomMax: 0, ads: 1 }, recoil: { up: 0, side: 0, vm: 0 }, adsZoom: 1, adsSpeed: 12,
-    sightY: 0.05, adsZ: -0.4, hip: [0.2, -0.2, -0.38], muzzle: [0, 0, -0.3], grip: [0, 0, 0.05], foreGrip: [0, 0, 0.05], eject: [0, 0, 0], magPos: [0, 0, 0], bolt: [0, 0, 0],
+    sightY: 0.05, adsZ: -0.4, hip: [0.2, -0.2, -0.38], grip: [0, 0, 0.05], foreGrip: [0, 0, 0.05], eject: [0, 0, 0], magPos: [0, 0, 0], bolt: [0, 0, 0], muzzle: rx([0, 0, -0.3]),
     sound: { freq: 900, thump: 90, gain: 0.25 }, melee: M, parts, flashScale: 0, ...extra };
 };
 const ser = (n, z0, dz, y, sz) => Array.from({ length: n }, (_, i) => ({ name: 'serr', c: [0, y, z0 - i * dz], s: [0.0055, sz, sz], rx: 0.785, col: [0.7, 0.72, 0.76], m: 'steel' }));
@@ -1409,7 +1415,7 @@ melee('knife', 'COMBAT KNIFE', [
   { name: 'edge', c: [0, -0.011, -0.092], s: [0.0065, 0.004, 0.15], col: [0.95, 0.96, 0.98], m: 'steel' },
   ...ser(5, -0.03, 0.012, 0.022, 0.006),
   { name: 'tip', c: [0, -0.002, -0.178], s: [0.005, 0.016, 0.032], rx: -0.35, col: [0.85, 0.86, 0.9], m: 'steel' },
-], { dmg: 55, range: 2.1, arc: 0.32, swing: 0.36, lunge: 5, hits: 1, style: 'stab' }, { moveMul: 1.12 });
+], { dmg: 55, range: 2.1, arc: 0.32, swing: 0.36, lunge: 5, hits: 1, style: 'stab', tilt: 1.05 }, { moveMul: 1.12, hip: [0.19, -0.2, -0.36] });
 melee('katana', 'KATANA', [
   // a diamond-wrapped hilt, a round guard, a brass collar, a long curved-looking blade with a pale temper line
   { name: 'grip', c: [0, 0, 0.06], s: [0.03, 0.034, 0.22], col: [0.08, 0.06, 0.06], m: 'cloth' },
@@ -1421,19 +1427,20 @@ melee('katana', 'KATANA', [
   { name: 'hamon', c: [0, -0.004, -0.42], s: [0.0086, 0.004, 0.68], col: [0.93, 0.94, 0.96], m: 'steel' },
   { name: 'edge', c: [0, -0.011, -0.42], s: [0.0085, 0.006, 0.7], col: [0.97, 0.98, 1], m: 'steel', em: 0.15 },
   { name: 'tip', c: [0, -0.004, -0.785], s: [0.007, 0.024, 0.06], rx: -0.5, col: [0.9, 0.92, 0.95], m: 'steel' },
-], { dmg: 75, range: 2.7, arc: 0.62, swing: 0.52, lunge: 4, hits: 2, style: 'slash' }, { moveMul: 1.06 });
+], { dmg: 75, range: 2.7, arc: 0.62, swing: 0.52, lunge: 4, hits: 2, style: 'slash', tilt: 0.95 }, { moveMul: 1.06, hip: [0.2, -0.22, -0.36] });
 melee('hammer', 'SLEDGEHAMMER', [
   // a hickory shaft with a taped grip, a steel collar and a heavy forged head with bevelled striking faces
   { name: 'shaft', c: [0, 0, -0.12], s: [0.034, 0.034, 0.62], col: [0.5, 0.36, 0.22], m: 'wood', shape: 'cyl' },
   { name: 'grip', c: [0, 0, 0.08], s: [0.042, 0.042, 0.16], col: DARKM, m: 'rubber', shape: 'cyl' },
   ...[0.01, 0.05, 0.09, 0.13].map((z) => ({ name: 'tape', c: [0, 0, z], s: [0.044, 0.044, 0.008], col: [0.85, 0.75, 0.1], m: 'rubber', shape: 'cyl' })),
   { name: 'collar', c: [0, 0, -0.37], s: [0.05, 0.05, 0.05], col: [0.25, 0.26, 0.28], m: 'steel' },
-  { name: 'head', c: [0, 0, -0.44], s: [0.2, 0.095, 0.095], col: [0.3, 0.31, 0.34], m: 'steel' },
-  { name: 'face', c: [0.106, 0, -0.44], s: [0.012, 0.085, 0.085], col: [0.7, 0.72, 0.76], m: 'steel' },
-  { name: 'face2', c: [-0.106, 0, -0.44], s: [0.012, 0.085, 0.085], col: [0.7, 0.72, 0.76], m: 'steel' },
-  { name: 'wedge', c: [0, 0.049, -0.44], s: [0.03, 0.004, 0.02], col: [0.55, 0.56, 0.6], m: 'steel' },
-  { name: 'band', c: [0, 0, -0.44], s: [0.205, 0.1, 0.02], col: [0.92, 0.1, 0.08], m: 'paint' },
-], { dmg: 120, range: 2.4, arc: 0.4, swing: 0.95, lunge: 2.5, hits: 1, style: 'smash', walls: 220 }, { moveMul: 0.96 });
+  // the head runs across the shaft top to bottom, so a striking face leads the swing down onto whoever's in front
+  { name: 'head', c: [0, 0, -0.44], s: [0.095, 0.2, 0.095], col: [0.3, 0.31, 0.34], m: 'steel' },
+  { name: 'face', c: [0, -0.106, -0.44], s: [0.085, 0.012, 0.085], col: [0.7, 0.72, 0.76], m: 'steel' },
+  { name: 'face2', c: [0, 0.106, -0.44], s: [0.085, 0.012, 0.085], col: [0.7, 0.72, 0.76], m: 'steel' },
+  { name: 'wedge', c: [0.049, 0, -0.44], s: [0.004, 0.03, 0.02], col: [0.55, 0.56, 0.6], m: 'steel' },
+  { name: 'band', c: [0, 0, -0.44], s: [0.1, 0.205, 0.02], col: [0.92, 0.1, 0.08], m: 'paint' },
+], { dmg: 120, range: 2.4, arc: 0.4, swing: 0.95, lunge: 2.5, hits: 1, style: 'smash', walls: 220, tilt: 1.2 }, { moveMul: 0.96, oneHanded: false, grip: [0, 0, 0.1], foreGrip: [0, 0, -0.16], hip: [0.17, -0.22, -0.4] });
 export const MELEE = ['knife', 'katana', 'hammer'];
 export const MELEE_DESC = {
   knife: 'Quick stabs that lunge you at whoever is in front of you. Two hits, or one in the head.',

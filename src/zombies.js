@@ -106,10 +106,10 @@ function buildBunker(world, A) {
   wallRun(32, -10, 34, 2, winHoles((w) => w[3] === 1), wallO);                              // east (x = 32)
   // inner walls, each with a doorway (2.4 wide, 3 tall)
   const DW = 2.4, DH = 3;
-  wallRun(10, -10, 10, 2, [[0, DW, DH, DH]], wallO);           // spawn | labs (x = 10, z -10..10)
-  wallRun(10, -10, 10, 0, [[0, DW, DH, DH]], wallO);           // spawn | hall (z = 10, x -10..10)
-  wallRun(10, 10, 32, 0, [[21, DW, DH, DH]], wallO);           // labs | power (z = 10, x 10..32)
-  wallRun(10, 10, 34, 2, [[22, DW, DH, DH]], wallO);           // hall | power (x = 10, z 10..34)
+  wallRun(10, -10, 10, 2, [[0, DW, 0, DH]], wallO);           // spawn | labs (x = 10, z -10..10)
+  wallRun(10, -10, 10, 0, [[0, DW, 0, DH]], wallO);           // spawn | hall (z = 10, x -10..10)
+  wallRun(10, 10, 32, 0, [[21, DW, 0, DH]], wallO);           // labs | power (z = 10, x 10..32)
+  wallRun(10, 10, 34, 2, [[22, DW, 0, DH]], wallO);           // hall | power (x = 10, z 10..34)
   // a dark band round the bottom of every inside wall, and pipes along the ceiling
   for (const [rid, R] of Object.entries(ROOMS)) {
     const [x0, z0] = R.min, [x1, z1] = R.max, e = t / 2 + 0.005;
@@ -410,7 +410,7 @@ export class ZombieMode extends Deathmatch {
     for (const d of this.doors) {
       if (d.open) continue;
       const c = L(d.x, 1, d.z);
-      if (near(c, 2.2) && look(c)) return { kind: 'door', d, text: `OPEN DOOR TO <b>${ROOMS[this.open.has(d.a) ? d.b : d.a].name}</b>`, cost: d.cost, ok: pts >= d.cost };
+      if (near(c, 2.8) && look(c)) return { kind: 'door', d, text: `OPEN DOOR TO <b>${ROOMS[this.open.has(d.a) ? d.b : d.a].name}</b>`, cost: d.cost, ok: pts >= d.cost };
     }
     for (const m of this.machines) if (near(m.pos, 1.9) && look(m.pos)) {
       if (this.perks.has(m.id)) return { kind: 'info', text: `<b>${m.name}</b> · YOU HAVE IT` };
@@ -517,6 +517,19 @@ export class ZombieMode extends Deathmatch {
       for (let i = 0; i < w.boards; i++) {
         const y = 1.05 + i * 0.25, tilt = ((i * 37) % 7 - 3) * 0.03;
         part(L(w.x - w.n[0] * 0.25, y, w.z - w.n[1] * 0.25), [0, yaw, tilt], [2.0, 0.17, 0.05], [0.45 - i * 0.02, 0.32, 0.2], { mat: 'wood' });
+      }
+    }
+    // closed doors: boarded across with two planks and a price stencilled on a sign
+    for (const d of this.doors) {
+      if (d.open) continue;
+      const yaw = d.axis === 0 ? 0 : Math.PI / 2;
+      for (const side of [-1, 1]) for (const [y, tilt] of [[0.9, 0.35], [2.1, -0.3]]) {
+        const off = d.axis === 0 ? [0, 0, side * 0.2] : [side * 0.2, 0, 0];
+        part(L(d.x + off[0], y, d.z + off[2]), [0, yaw, tilt], [2.7, 0.22, 0.06], [0.48, 0.34, 0.2], { mat: 'wood' });
+      }
+      for (const side of [-1, 1]) {
+        const off = d.axis === 0 ? [0, 0, side * 0.2] : [side * 0.2, 0, 0];
+        part(L(d.x + off[0], 1.5, d.z + off[2]), [0, yaw, 0], [0.9, 0.36, 0.04], this.points >= d.cost ? [0.95, 0.75, 0.15] : [0.6, 0.15, 0.1], { em: 0.6 });
       }
     }
     // chalk outlines of the guns on the walls

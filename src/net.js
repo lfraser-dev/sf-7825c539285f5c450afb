@@ -363,7 +363,7 @@ function cleanMe(m) {
   const lv = Math.max(1, Math.min(50, Math.floor(+m.lv || 1)));
   const col = (c) => (Array.isArray(c) && c.length === 3 && c.every((v) => Number.isFinite(v)) ? c.map((v) => Math.max(0, Math.min(1, v))) : null);
   const L = m.look && typeof m.look === 'object' ? m.look : null;
-  const look = L ? { m: col(L.m), h: col(L.h), b: col(L.b), s: col(L.s), g: col(L.g), w: String(L.w || '').slice(0, 16), sk: String(L.sk || '').slice(0, 24), a: L.a && typeof L.a === 'object' ? L.a : {}, eq: L.eq && typeof L.eq === 'object' ? Object.fromEntries(Object.entries(L.eq).slice(0, 16).map(([k, v]) => [String(k).slice(0, 12), String(v).slice(0, 24)])) : null, fx: L.fx >= 40 && L.fx <= 52 ? Math.floor(L.fx) : 0 } : null;
+  const look = L ? { m: col(L.m), h: col(L.h), b: col(L.b), s: col(L.s), g: col(L.g), w: String(L.w || '').slice(0, 16), sk: String(L.sk || '').slice(0, 24), a: L.a && typeof L.a === 'object' ? L.a : {}, eq: L.eq && typeof L.eq === 'object' ? Object.fromEntries(Object.entries(L.eq).slice(0, 16).map(([k, v]) => [String(k).slice(0, 12), String(v).slice(0, 24)])) : null, fx: L.fx >= 40 && L.fx <= 55 ? Math.floor(L.fx) : 0 } : null;
   const rk = Number.isFinite(+m.rk) ? Math.max(0, Math.min(99999, Math.floor(+m.rk))) : 0;
   const cr = m.cr && typeof m.cr === 'object' && cleanTag(m.cr.t).length >= 2 ? { t: cleanTag(m.cr.t), c: /^#[0-9a-f]{6}$/i.test(m.cr.c) ? m.cr.c : '#ff4a40' } : null;
   const id = (v, pre) => (typeof v === 'string' && new RegExp(`^${pre}_[a-z0-9]{1,16}$`).test(v) ? v : null);

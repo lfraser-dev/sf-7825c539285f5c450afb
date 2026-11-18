@@ -402,7 +402,8 @@ void main() {
       gunFill = 0.6;
       vec3 sig = k == 40 ? vec3(0.3, 0.65, 1.0) : k == 41 ? vec3(1.0, 0.5, 0.08) : k == 42 ? vec3(0.7, 0.8, 0.95) : k == 43 ? vec3(0.8, 0.86, 0.95)
         : k == 44 ? vec3(1.0, 0.45, 0.05) : k == 45 ? vec3(0.65, 0.25, 1.0) : k == 46 ? vec3(1.0, 0.45, 0.9) : k == 47 ? vec3(0.15, 1.0, 0.85)
-        : k == 48 ? vec3(0.5, 0.85, 1.0) : k == 49 ? vec3(0.4, 0.68, 1.0) : k == 50 ? vec3(1.0, 0.08, 0.06) : k == 51 ? vec3(0.85, 0.95, 1.0) : vec3(1.0, 0.8, 0.3);
+        : k == 48 ? vec3(0.5, 0.85, 1.0) : k == 49 ? vec3(0.4, 0.68, 1.0) : k == 50 ? vec3(1.0, 0.08, 0.06) : k == 51 ? vec3(0.85, 0.95, 1.0) : k == 52 ? vec3(1.0, 0.8, 0.3)
+        : k == 53 ? vec3(0.15, 1.0, 0.45) : k == 54 ? vec3(1.0, 0.2, 0.7) : vec3(0.6, 0.85, 1.0);
       float dk = 1.0 - smoothstep(0.1, 0.2, T);
       vec3 lp = vLocal * uScale + vec3(hash(uScale * 37.0), hash(uScale * 53.0), hash(uScale * 71.0)) * 0.3;
       vec3 ln = abs(vLocalN);
@@ -560,6 +561,44 @@ void main() {
         float spark = step(0.97, face) * 2.0;
         tGlow = spark + 0.08;
         tRough = 0.05; tMetal = 0.85;
+      } else if (k == 53) {
+        // DEV · SOURCE CODE: black with columns of green code raining down it; firing speeds the rain and lights it up
+        vec2 c = floor(q * vec2(90.0, 110.0));
+        float sp = 4.0 + hash(vec3(c.x, 0.0, 5.0)) * 6.0 + E * 10.0;
+        float head = fract(hash(vec3(c.x, 1.0, 5.0)) - t * sp / 40.0 + c.y / 40.0);
+        float trail = pow(1.0 - head, 6.0);
+        float glyph = step(0.35, hash(vec3(c, floor(t * 8.0 + hash(vec3(c, 6.0)) * 8.0))));
+        float cell = pane(fract(q * vec2(90.0, 110.0)), vec2(0.15, 0.1));
+        float lit = trail * glyph * cell;
+        base = mix(vec3(0.01, 0.025, 0.015), vec3(0.15, 1.0, 0.45), lit) + vec3(0.8, 1.0, 0.85) * step(0.985, 1.0 - head) * glyph * cell;
+        tGlow = lit * (0.9 + E * 1.2) + 0.03;
+        tRough = 0.4; tMetal = 0.2;
+      } else if (k == 54) {
+        // DEV · GLITCH: blocks of colour that jump about, scanlines rolling down, and the picture tearing sideways
+        float jt = floor(t * 7.0);
+        float tear = step(0.86, hash(vec3(floor(q.y * 30.0), jt, 3.0))) * (hash(vec3(jt, 1.0, 9.0)) - 0.5) * 0.15;
+        vec2 g = floor((q + vec2(tear, 0.0)) * vec2(28.0, 42.0));
+        float h = hash(vec3(g, floor(t * (2.0 + E * 8.0) + hash(vec3(g, 4.0)) * 4.0)));
+        vec3 col = h < 0.3 ? vec3(1.0, 0.1, 0.45) : h < 0.55 ? vec3(0.1, 0.85, 1.0) : h < 0.7 ? vec3(0.2, 1.0, 0.4) : vec3(0.03, 0.03, 0.05);
+        float scan = 0.75 + 0.25 * sin(q.y * 600.0 + t * 30.0);
+        float roll = smoothstep(0.0, 0.03, fract(q.y * 2.0 - t * 0.6)) * (1.0 - smoothstep(0.03, 0.06, fract(q.y * 2.0 - t * 0.6)));
+        base = col * scan * mix(1.0, 0.55, dk) + roll * 0.6;
+        tGlow = (h < 0.7 ? 0.45 : 0.0) * scan + roll + E * 0.4;
+        tRough = 0.3; tMetal = 0.3;
+      } else if (k == 55) {
+        // DEV · ROOT ACCESS: dark chrome cut with glowing circuit lines that run every colour of the rainbow
+        vec2 g = q * 60.0, gi = floor(g), gf = fract(g);
+        float hx = step(0.5, hash(vec3(gi, 11.0))), lineA = 1.0 - smoothstep(0.04, 0.09, abs(gf.y - 0.5)), lineB = 1.0 - smoothstep(0.04, 0.09, abs(gf.x - 0.5));
+        float trace = max(lineA * hx, lineB * (1.0 - hx));
+        float node = 1.0 - smoothstep(0.12, 0.2, length(gf - 0.5));
+        node *= step(0.8, hash(vec3(gi, 12.0)));
+        float hue = q.x * 4.0 + q.y * 3.0 - t * (0.6 + E * 2.0);
+        vec3 rb = 0.5 + 0.5 * cos(6.2832 * (hue + vec3(0.0, 0.33, 0.67)));
+        float pulse = 0.5 + 0.5 * sin(hue * 6.2832 * 2.0);
+        base = mix(vec3(0.06, 0.065, 0.08), rb, max(trace, node) * (0.55 + 0.45 * pulse));
+        base += vec3(0.25) * fres;
+        tGlow = max(trace, node) * (0.6 + pulse * 0.8 + E);
+        tRough = 0.12; tMetal = 0.9;
       } else {
         // AURUM: polished gold with a light sweeping down the gun; firing makes it glow
         float sweep = smoothstep(0.92, 1.0, sin(lp.z * 8.0 + lp.y * 4.0 - t * 2.5) * 0.5 + 0.5);

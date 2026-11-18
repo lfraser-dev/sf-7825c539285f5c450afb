@@ -195,6 +195,14 @@ export const ITEMS = {
   w_darkmatter: { slot: 'wskin', name: 'DARK MATTER', price: 4500, rarity: 'legendary', gun: { tex: 45, sw: [0.45, 0.1, 0.85] }, fx: 'Swirling purple space with twinkling stars. It churns faster while you shoot.', live: true },
   w_diamond: { slot: 'wskin', name: 'DIAMOND', price: 5000, rarity: 'legendary', gun: { tex: 51, sw: [0.85, 0.93, 1] }, fx: 'Faceted crystal that throws sparkles as it moves.', live: true },
   w_aurum: { slot: 'wskin', name: 'AURUM', price: 5000, rarity: 'legendary', gun: { tex: 52, sw: [1, 0.8, 0.3] }, fx: 'Polished gold with light sweeping down it. Glows while you fire.', live: true },
+  // ---- DEV skins (build 0.74): only once the dev passcode's been entered
+  w_dev_code: { slot: 'wskin', name: 'SOURCE CODE', price: 0, rarity: 'dev', dev: true, gun: { tex: 53, sw: [0.15, 1, 0.45] }, fx: 'Black, with green code raining down it. Shoot and the rain speeds up and lights up.', live: true },
+  w_dev_glitch: { slot: 'wskin', name: 'GLITCH', price: 0, rarity: 'dev', dev: true, gun: { tex: 54, sw: [1, 0.2, 0.7] }, fx: 'Blocks of colour that jump about, rolling scanlines, the picture tearing sideways.', live: true },
+  w_dev_root: { slot: 'wskin', name: 'ROOT ACCESS', price: 0, rarity: 'dev', dev: true, gun: { tex: 55, sw: [0.6, 0.85, 1] }, fx: 'Dark chrome cut with circuit lines that run every colour of the rainbow.', live: true },
+  h_dev: { slot: 'head', name: 'DEV VISOR', price: 0, rarity: 'dev', dev: true, apply: { head: 'helmet', headCol: [0.04, 0.05, 0.05], visor: [0.15, 1, 0.45], visorGlow: 0.95 }, fx: 'A black helmet with a glowing green visor.', live: true },
+  t_dev: { slot: 'top', name: 'SOURCE CODE HOODIE', price: 0, rarity: 'dev', dev: true, apply: { top: [0.1, 0.9, 0.4], topStyle: 'hoodie', logo: null, fxTop: 53 }, fx: 'Green code rains down it.', live: true },
+  o_dev: { slot: 'outer', name: 'GLITCH BOMBER', price: 0, rarity: 'dev', dev: true, apply: { jacket: [0.9, 0.2, 0.6], jacketStyle: 'bomber', trim: [0.05, 0.05, 0.06], vest: null, fxJacket: 54 }, fx: 'A jacket that glitches.', live: true },
+  l_dev: { slot: 'legs', name: 'ROOT ACCESS TRACKIES', price: 0, rarity: 'dev', dev: true, apply: { bottom: [0.4, 0.6, 0.9], legStyle: 'track', stripe: [0.15, 1, 0.45], fxBottom: 55 }, fx: 'Rainbow circuit lines down both legs.', live: true },
 };
 
 Object.assign(ITEMS, PROFILE_ITEMS);

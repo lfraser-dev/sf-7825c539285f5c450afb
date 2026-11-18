@@ -59,7 +59,7 @@
 // key can unscramble the game. Nothing about the password is stored on the site. A device that unlocked it once keeps
 // the key, so you only type it the first time. Too many wrong guesses lock the box for a while.
 (() => {
-  const SALT = '3rtjOG4YsiAJ072fGDa7KA==', ITER = 600000, VER = '0.73-8204bb', WORD_H = '30e57ce89734d7b357d882dc82c8a6f62ce72f58c192f14ecc1712f7b142ab75', WORD_L = 6;
+  const SALT = '3rtjOG4YsiAJ072fGDa7KA==', ITER = 600000, VER = '0.74-8ed1ce', WORD_H = '30e57ce89734d7b357d882dc82c8a6f62ce72f58c192f14ecc1712f7b142ab75', WORD_L = 6;
   const $ = (id) => document.getElementById(id);
   const gate = $('gate'), pw = $('pw'), go = $('go'), msg = $('msg');
   const b64 = (u) => btoa(String.fromCharCode(...u));

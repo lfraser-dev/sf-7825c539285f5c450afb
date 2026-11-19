@@ -17,7 +17,7 @@ export class Effects {
   clear() { this.debris.length = 0; this.tracers.length = 0; this.beams.length = 0; this.decals.length = 0; }
 
   spawnPiece(pos, size, vel, color, life, emissive = 0) {
-    if (this.debris.length >= MAX_DEBRIS) this.debris.shift();
+    if (this.debris.length >= (this.max || MAX_DEBRIS)) this.debris.shift();
     this.debris.push({
       pos: [...pos], size, vel, color, emissive, life, maxLife: life,
       rot: [Math.random() * 6, Math.random() * 6, Math.random() * 6],

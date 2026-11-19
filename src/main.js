@@ -24,6 +24,7 @@ import { Elevator } from './elevator.js';
 import { BotManager, Bot, teamPalette, lookPalette } from './bots.js';
 import { loadDaily, dailyList, dailyEvent, familyOf, msToReset } from './challenges.js';
 import { ZombieMode, ZMAP, BOX_POOL, DROPS } from './zombies.js';
+import { HeliGame } from './heli/game.js';
 ARENAS.push(ZMAP);        // the zombies map: built with the arenas, but never in the team deathmatch rotation
 import { divisionOf, divHTML, crewHTML, loadRanked, rankedResult, loadCrew, saveCrew, CREW_COLS, cleanTag } from './social.js';
 import { PASS, REWARDS, loadPass, savePass, tierOf, tierProgress, payOut } from './pass.js';
@@ -70,6 +71,14 @@ const zoneOf = (b) => {
 const effects = new Effects(world);
 const input = new Input(canvas);
 const sounds = new Sounds();
+// DEAD AIR: the helicopter mode runs its own loop, input and HUD (heli/game.js). Made here, early, so its key
+// handlers come before the FPS game's.
+const heli = new HeliGame({
+  renderer, sounds, canvas,
+  earn: (n) => { cosmetics.credits += n; saveCosmetics(cosmetics); },
+  onExit: () => { menu.classList.remove('hidden'); renderMenu(); },
+  isDev: () => DEV.on,
+});
 const gadgets = new Gadgets(world, effects, sounds);     // barricades, pads, drone pods, turret bases
 // heavy weapons: drones, grenades, fire pools, turret brains. Hooks tie them to whoever you can hurt.
 const heavy = new Heavy(world, effects, sounds, gadgets, {
@@ -2872,6 +2881,7 @@ function startMode() {
   start();
 }
 $('mm-zombies').addEventListener('click', () => startMode('zombies'));
+$('mm-heli').addEventListener('click', () => { sounds.unlock(); menu.classList.add('hidden'); heli.open(); });
 {
   let clicks = [];
   document.querySelector('.mm-kicker')?.addEventListener('click', () => {
@@ -3517,6 +3527,7 @@ function drawShowroom(aspect) {
 const studioFloorM = mat4(), studioShadowM = mat4(), studioShadowM2 = mat4();
 showTab('home');
 document.addEventListener('pointerlockchange', () => {
+  if (heli.active) return;
   if (document.pointerLockElement === canvas) {
     locked = true;
     $('locknote').classList.add('hidden');
@@ -3868,6 +3879,7 @@ function frameBody(now) {
   const dt = rdt * timeScale * (slowmo > 0 ? 0.3 : 1);
   last = now;
   time += dt;
+  if (heli.active) { heli.frame(rdt); input.endFrame(); requestAnimationFrame(frame); return; }
   // dynamic resolution: drop the render scale when frames take too long, raise it again when there's headroom
   if (playing && document.visibilityState === 'visible') {
     perfT += Math.min((now - perfLast) / 1000, 0.25); perfN++;
@@ -4165,4 +4177,4 @@ function frameBody(now) {
 requestAnimationFrame(frame);
 
 // handy for debugging from the console / automated tests
- window.game = { tryDevCode, openDevCode, openDevPanel, get devFlags() { return devFlags; }, DEV, myProfile, equipItem, spray, sprays, deathFx, playEmote, kf: (...a) => killFeed(...a), daily, gainXp: (n, l) => gainXp(n, l), progress, skinLive: (h, s) => { skinHeat = h; skinStreak = s; }, startTakedown, updateTakedown, findDowned, takedownParts, get td() { return td; }, get deathT() { return deathT; }, useRack, skinKill, ranked, get crew() { return crew; }, openCrew, startMode, zombies, ZMAP, zFillAmmo, modeUse: () => modeThing, modeUseNow: () => modeUse(), fireNow: () => { updateCamera(); fire(weapon()); }, pass, passXp, buyPremium, meleeTargets: (r, a, m) => { updateCamera(); return meleeTargets(r, a, m).map((t) => ({ dist: t.dist })); }, camFwd: () => camFwd, redeemCode, useBuff, get buff() { return { kind: buffKind, t: buffT }; }, setThrow: (k) => { equippedThrow = k; throwCharges = 2; }, useThrowable, get throwCharges() { return throwCharges; }, get flashT() { return flashT; }, heavy, useHeavy, applyClass, useGadget, useTether, useCloak, get cloakT() { return cloakT; }, get launcherW() { return launcherW; }, gadgets, get burning() { return burning; }, lobby, online, get tdm() { return tdm; }, batches, renderer, map, ARENAS, get stadium() { return stadium; }, setArena: (i) => { stadium = ARENAS[i]; }, lifts, hooks: botHooks, updateFall, hookTarget, fallTop: () => fallTop, breakGlass, updateCombat, startMatch: (m) => startMatch(m), enterStadium, where: () => where, sr: () => showroomChar, cosmetics, refreshGuns, classLo, renderMenu, showTab, enterRange, cs: () => cutscene, botMgr, elevator, damagePlayer, pressConsole, setTimeScale: (v) => { timeScale = v; }, bench, openBench, closeBench, loadouts, applyLoadout, course, player, slots, weapon, world, stats, effects, dummies, walls, cases, input, start, setPlaying, resetRange, switchTo, pickUp, WEAPONS };
+ window.game = { tryDevCode, openDevCode, openDevPanel, get devFlags() { return devFlags; }, DEV, myProfile, equipItem, spray, sprays, deathFx, playEmote, kf: (...a) => killFeed(...a), daily, gainXp: (n, l) => gainXp(n, l), progress, skinLive: (h, s) => { skinHeat = h; skinStreak = s; }, startTakedown, updateTakedown, findDowned, takedownParts, get td() { return td; }, get deathT() { return deathT; }, useRack, skinKill, ranked, get crew() { return crew; }, openCrew, startMode, zombies, ZMAP, zFillAmmo, heli, modeUse: () => modeThing, modeUseNow: () => modeUse(), fireNow: () => { updateCamera(); fire(weapon()); }, pass, passXp, buyPremium, meleeTargets: (r, a, m) => { updateCamera(); return meleeTargets(r, a, m).map((t) => ({ dist: t.dist })); }, camFwd: () => camFwd, redeemCode, useBuff, get buff() { return { kind: buffKind, t: buffT }; }, setThrow: (k) => { equippedThrow = k; throwCharges = 2; }, useThrowable, get throwCharges() { return throwCharges; }, get flashT() { return flashT; }, heavy, useHeavy, applyClass, useGadget, useTether, useCloak, get cloakT() { return cloakT; }, get launcherW() { return launcherW; }, gadgets, get burning() { return burning; }, lobby, online, get tdm() { return tdm; }, batches, renderer, map, ARENAS, get stadium() { return stadium; }, setArena: (i) => { stadium = ARENAS[i]; }, lifts, hooks: botHooks, updateFall, hookTarget, fallTop: () => fallTop, breakGlass, updateCombat, startMatch: (m) => startMatch(m), enterStadium, where: () => where, sr: () => showroomChar, cosmetics, refreshGuns, classLo, renderMenu, showTab, enterRange, cs: () => cutscene, botMgr, elevator, damagePlayer, pressConsole, setTimeScale: (v) => { timeScale = v; }, bench, openBench, closeBench, loadouts, applyLoadout, course, player, slots, weapon, world, stats, effects, dummies, walls, cases, input, start, setPlaying, resetRange, switchTo, pickUp, WEAPONS };
